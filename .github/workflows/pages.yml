@@ -3,7 +3,6 @@ name: Deploy static site to GitHub Pages
 on:
   push:
     branches: ["main"]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,56 +18,63 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository with submodule
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
       - name: Setup Pages
         uses: actions/configure-pages@v5
-
-      - name: Remove stale github-pages artifacts from earlier runs
-        # deploy-pages looks up the artifact by name; leftover duplicates
-        # from previous runs make the lookup fail. Delete them first.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          curl -s -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-            | python3 -c "
-          import json, sys
-          for a in json.load(sys.stdin).get('artifacts', []):
-              if a['name'] == 'github-pages':
-                  print(a['id'])
-          " | while read -r id; do
-              echo "Deleting stale artifact $id"
-              curl -s -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
-                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$id"
-            done
-
-      - name: Upload Pages artifact
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
-
-      - name: "Debug: list artifacts with GITHUB_TOKEN"
+      # deploy-pages@v4 looks the artifact up through GitHub's artifact
+      # service (Twirp ListArtifacts), which returns 0 artifacts for this
+      # repo even though the upload succeeded and the REST API lists it.
+      # Deploy through the REST Pages API instead, using the artifact id
+      # the REST API demonstrably returns. This mirrors exactly what
+      # deploy-pages does after its (broken) lookup: POST
+      # /repos/{owner}/{repo}/pages/deployments with artifact_id,
+      # pages_build_version (= GITHUB_SHA) and the OIDC token.
+      - name: Deploy via Pages REST API
+        id: deploy
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          OUT=$(curl -s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?run_id=$GITHUB_RUN_ID&per_page=100")
-          echo "$OUT" > /tmp/arts.json
-          echo "::group::raw artifact list"
-          echo "$OUT" | head -c 3000
-          echo "::endgroup::"
-          echo "::notice::DEBUG artifact-list for run $GITHUB_RUN_ID: $(echo "$OUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print([(a['id'],a['name'],a['size_in_bytes'],a['created_at']) for a in d.get('artifacts',[])]) or d.get('message')")"
-          if echo "$OUT" | grep -q '"artifacts": \[\]'; then
-            echo "::warning::DEBUG: token sees NO artifacts for this run (metadata backend issue?)"
-          fi
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          set -euo pipefail
+          ARTIFACT_ID=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" --jq '[.artifacts[] | select(.name=="github-pages")] | sort_by(.created_at) | last | .id')
+          echo "artifact id: ${ARTIFACT_ID}"
+          test -n "${ARTIFACT_ID}" && test "${ARTIFACT_ID}" != "null"
+          ID_TOKEN=$(curl -s -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}" | jq -r .value)
+          test -n "${ID_TOKEN}" && test "${ID_TOKEN}" != "null"
+          DEPLOY_JSON=$(curl -s -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/deployments" \
+            -d "{\"artifact_id\": ${ARTIFACT_ID}, \"pages_build_version\": \"${GITHUB_SHA}\", \"oidc_token\": \"${ID_TOKEN}\"}")
+          echo "${DEPLOY_JSON}"
+          DEPLOY_ID=$(echo "${DEPLOY_JSON}" | jq -r '.id // (.status_url | split("/") | last)')
+          test -n "${DEPLOY_ID}" && test "${DEPLOY_ID}" != "null"
+          for i in $(seq 1 30); do
+            STATUS_JSON=$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/deployments/${DEPLOY_ID}")
+            STATUS=$(echo "${STATUS_JSON}" | jq -r .status)
+            echo "deployment status: ${STATUS}"
+            case "${STATUS}" in
+              succeed)
+                PAGE_URL=$(echo "${STATUS_JSON}" | jq -r .page_url)
+                echo "page_url=${PAGE_URL}" >> "${GITHUB_OUTPUT}"
+                echo "deployed: ${PAGE_URL}"
+                exit 0
+                ;;
+              error|failed)
+                echo "${STATUS_JSON}"
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+          echo "deployment did not finish within 5 minutes"
+          exit 1
