@@ -58,10 +58,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "run_id=${{ github.run_id }}"
-          curl -s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?run_id=$GITHUB_RUN_ID&per_page=100" \
-            | python3 -m json.tool | head -40
+          OUT=$(curl -s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?run_id=$GITHUB_RUN_ID&per_page=100")
+          echo "$OUT" > /tmp/arts.json
+          echo "::group::raw artifact list"
+          echo "$OUT" | head -c 3000
+          echo "::endgroup::"
+          echo "::notice::DEBUG artifact-list for run $GITHUB_RUN_ID: $(echo "$OUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print([(a['id'],a['name'],a['size_in_bytes'],a['created_at']) for a in d.get('artifacts',[])]) or d.get('message')")"
+          if echo "$OUT" | grep -q '"artifacts": \[\]'; then
+            echo "::warning::DEBUG: token sees NO artifacts for this run (metadata backend issue?)"
+          fi
 
       - name: Deploy to GitHub Pages
         id: deployment
