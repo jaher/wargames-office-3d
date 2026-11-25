@@ -54,7 +54,7 @@ jobs:
         with:
           path: '.'
 
-      - name: Debug: list artifacts with GITHUB_TOKEN
+      - name: "Debug: list artifacts with GITHUB_TOKEN"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
