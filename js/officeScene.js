@@ -903,6 +903,10 @@ export class OfficeScene {
     envScene.add(pendCard);
 
     const nextRT = this.pmremGenerator.fromScene(envScene, 0.035);
+    envScene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    });
     if (this.envRenderTarget) this.envRenderTarget.dispose();
     this.envRenderTarget = nextRT;
     this.scene.environment = nextRT.texture;
@@ -1127,6 +1131,7 @@ export class OfficeScene {
 
     // Aerial-perspective atmospheric haze injection applied ONLY to exterior skyline materials
     const injectAerialHaze = (mat) => {
+      mat.customProgramCacheKey = () => 'aerial-haze-v1';
       mat.onBeforeCompile = (shader) => {
         shader.uniforms.uHazeColor = this.hazeUniforms.uHazeColor;
         shader.uniforms.uSunDir = this.hazeUniforms.uSunDir;
@@ -3249,6 +3254,19 @@ export class OfficeScene {
     }
   }
 
+  renderFrame() {
+    if (this.composer) {
+      try {
+        this.composer.render();
+        return;
+      } catch (err) {
+        console.warn('Post-processing fallback to direct WebGL renderer:', err);
+        this.composer = null;
+      }
+    }
+    this.renderer.render(this.scene, this.camera);
+  }
+
   start() {
     const tmpColor = new THREE.Color();
     const loop = () => {
@@ -3301,12 +3319,7 @@ export class OfficeScene {
       }
 
       this.omarchyScreen.tick(elapsed);
-
-      if (this.composer) {
-        this.composer.render();
-      } else {
-        this.renderer.render(this.scene, this.camera);
-      }
+      this.renderFrame();
     };
     loop();
   }

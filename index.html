@@ -7,6 +7,14 @@
   <meta name="description" content="Interactive 3D office with an Omarchy Linux workstation, Corsair RTX 5090 rig, 8x DGX Spark cluster, and live narrated OverTheWire wargame solutions.">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js">
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/OrbitControls.js">
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/geometries/RoundedBoxGeometry.js">
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/lights/RectAreaLightUniformsLib.js">
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/lights/RectAreaLightTexturesLib.js">
+  <link rel="modulepreload" href="js/main.js">
+  <link rel="modulepreload" href="js/officeScene.js">
+  <link rel="modulepreload" href="js/omarchyScreen.js">
+  <link rel="modulepreload" href="js/solutions.js">
   <link rel="stylesheet" href="css/style.css">
   <script type="importmap">
     {
@@ -138,6 +146,39 @@
     </aside>
   </div>
 
+  <script>
+    // Failsafe boot watchdog: surfaces any module/WebGL load error instead of spinning forever
+    (function () {
+      var showErr = function (msg) {
+        var el = document.getElementById('loadingStatus');
+        if (el) el.textContent = msg;
+      };
+      window.addEventListener('error', function (e) {
+        if (!window.__officeReady) {
+          showErr('Load error: ' + (e.message || 'Failed to load 3D modules'));
+        }
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        if (!window.__officeReady) {
+          var reason = e.reason && (e.reason.message || String(e.reason));
+          showErr('Startup error: ' + (reason || 'Module load failed'));
+        }
+      });
+      setTimeout(function () {
+        if (!window.__officeReady) {
+          var ov = document.getElementById('loadingOverlay');
+          var el = document.getElementById('loadingStatus');
+          if (el && el.textContent.indexOf('error') === -1) {
+            el.textContent = '3D modules are taking longer than expected — click here to dismiss overlay.';
+          }
+          if (ov) {
+            ov.style.cursor = 'pointer';
+            ov.addEventListener('click', function () { ov.classList.add('hidden'); }, { once: true });
+          }
+        }
+      }, 10000);
+    })();
+  </script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

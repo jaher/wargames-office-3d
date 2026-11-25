@@ -42,6 +42,7 @@ function setActiveCamButton(camButtons, preset) {
 }
 
 function hideLoadingOverlay(dom) {
+  window.__officeReady = true;
   if (!dom.loadingOverlay) return;
   dom.loadingOverlay.classList.add('hidden');
 }
@@ -52,12 +53,14 @@ function bootstrap() {
   let office = null;
 
   try {
-    dom.loadingStatus.textContent = 'Building 3D office…';
+    dom.loadingStatus.textContent = 'Building 3D office scene…';
     office = new OfficeScene(dom.canvas, omarchyScreen, (preset) => {
       setActiveCamButton(dom.camButtons, preset);
     });
+    dom.loadingStatus.textContent = 'Rendering first frame…';
+    office.renderFrame();
     office.start();
-    // Reveal the 3D scene immediately on the first painted frame — never block on network fetches!
+    // Reveal the 3D scene immediately once first frame is painted — never block on fetches or audio!
     requestAnimationFrame(() => hideLoadingOverlay(dom));
   } catch (err) {
     console.error('3D scene initialization failed:', err);
