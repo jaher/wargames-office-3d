@@ -1,0 +1,4 @@
+[submodule "overthewire-solutions"]
+	path = overthewire-solutions
+	url = https://github.com/jaher/overthewire-solutions.git
+	branch = main

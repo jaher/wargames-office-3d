@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wargames Office 3D — OverTheWire Solutions</title>
+  <meta name="description" content="Interactive 3D office with an Omarchy Linux workstation, Corsair RTX 5090 rig, 8x DGX Spark cluster, and live narrated OverTheWire wargame solutions.">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app" class="app">
+    <main class="viewport-wrap" aria-label="3D Office Scene">
+      <canvas id="sceneCanvas"></canvas>
+
+      <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-card">
+          <div class="loading-spinner"></div>
+          <div class="loading-title">Initializing Wargames Office 3D</div>
+          <div id="loadingStatus" class="loading-sub">Building scene &amp; loading OverTheWire solutions…</div>
+        </div>
+      </div>
+
+      <header class="hud-top">
+        <div class="brand-pill">
+          <span class="brand-dot"></span>
+          <span class="brand-name">WARGAMES OFFICE 3D</span>
+          <span class="brand-sep">·</span>
+          <span id="hudNowPlaying" class="brand-mission">Loading…</span>
+        </div>
+
+        <div class="hud-actions">
+          <button id="skyMoodBtn" class="hud-btn" title="Switch window sky lighting">☀ Golden Hour</button>
+          <button id="togglePanelBtn" class="hud-btn hud-btn-accent" title="Toggle solutions &amp; narration panel (P)">Hide Panel</button>
+        </div>
+      </header>
+
+      <nav class="camera-bar" aria-label="Camera Presets">
+        <button class="cam-btn active" data-cam="overview" title="Shortcut: 1">1 · Office</button>
+        <button class="cam-btn" data-cam="monitor" title="Shortcut: 2">2 · Omarchy Monitor</button>
+        <button class="cam-btn" data-cam="pc" title="Shortcut: 3">3 · Corsair RTX 5090</button>
+        <button class="cam-btn" data-cam="cluster" title="Shortcut: 4">4 · 8× DGX Spark + CRS804</button>
+        <button class="cam-btn" data-cam="window" title="Shortcut: 5">5 · Skyline View</button>
+      </nav>
+
+      <div class="hud-hint" id="hudHint">
+        Drag to orbit · Scroll to zoom · Click monitor, PC, or DGX stack to inspect
+      </div>
+    </main>
+
+    <aside id="sidePanel" class="side-panel" aria-label="OverTheWire Solutions Console">
+      <div class="panel-header">
+        <div>
+          <h1>OverTheWire Terminal</h1>
+          <p class="panel-sub">Omarchy Linux · Live narrated replays · Passwords redacted</p>
+        </div>
+        <span id="statusBadge" class="status-badge">Ready</span>
+      </div>
+
+      <section class="selectors" aria-label="Mission and Level Selection">
+        <label class="field">
+          <span>Wargame</span>
+          <select id="familySel">
+            <option value="otw" selected>OverTheWire</option>
+            <option value="s2s">SmashTheStack</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Mission</span>
+          <select id="gameSel"></select>
+        </label>
+        <label class="field">
+          <span>Level</span>
+          <select id="jump"></select>
+        </label>
+      </section>
+
+      <section class="controls-bar" aria-label="Playback Controls">
+        <button id="playBtn" class="ctrl-btn primary">⏸ Pause</button>
+        <button id="restartBtn" class="ctrl-btn" title="Restart current level">⟲ Restart</button>
+        <button id="narrBtn" class="ctrl-btn" style="display:none">🔊 Narrate</button>
+        <label class="speed-wrap">
+          <span>Speed</span>
+          <select id="speed">
+            <option value="2">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="0.45">2×</option>
+            <option value="0.15">4×</option>
+          </select>
+        </label>
+      </section>
+
+      <div class="progress-track" aria-label="Mission Progress">
+        <div id="fill" class="progress-fill"></div>
+      </div>
+
+      <section id="narrBar" class="narr-bar" aria-label="Voice Narration Controls">
+        <div class="narr-bar-top">
+          <span class="narr-badge">🎙 Voice</span>
+          <span id="narrTime" class="narr-time">0:00 / 0:00</span>
+          <button id="narrPlayPause" class="mini-btn" title="Play or pause voice audio">▶</button>
+        </div>
+        <input type="range" id="narrSeek" min="0" max="100" step="0.1" value="0" aria-label="Narration seek">
+        <div id="narrSeg" class="narr-caption"></div>
+      </section>
+
+      <div class="term-shell">
+        <div class="term-chrome">
+          <span class="term-dots"><i></i><i></i><i></i></span>
+          <span id="termTitle" class="term-title">omarchy :: ghostty</span>
+          <button id="focusMonitorBtn" class="mini-btn" title="Zoom 3D camera onto monitor">3D Focus</button>
+        </div>
+        <div id="term" class="term" aria-label="Terminal solution replay"></div>
+      </div>
+
+      <section id="transcriptWrap" class="transcript-wrap" style="display:none" aria-label="Narration Transcript">
+        <div class="transcript-head">
+          <span>Narration Transcript</span>
+          <span class="transcript-hint">Click any line to seek</span>
+        </div>
+        <div id="narrTranscript" class="narr-transcript"></div>
+      </section>
+
+      <footer class="panel-footer">
+        Data synced via git submodule from
+        <a href="https://github.com/jaher/overthewire-solutions" target="_blank" rel="noopener">jaher/overthewire-solutions</a>.
+        All wargame passwords are hidden.
+      </footer>
+    </aside>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
