@@ -114,6 +114,7 @@ export class SolutionsController {
     this.narrMap = null;
     this.narrOn = false;
     this.narrFF = false;
+    this.narrAutoplayBlocked = false;
     this.narrGame = '';
     this.narrLevel = -1;
     this.narrLevelKey = '';
@@ -122,6 +123,7 @@ export class SolutionsController {
     this.narrKeySegs = new Map();
     this.activeNarrSeg = -1;
     this.activeSecrets = [];
+    this._gameFetchPromises = new Map();
 
     this._bindEvents();
   }
@@ -132,22 +134,24 @@ export class SolutionsController {
       narrBtn, narrSeek, narrPlayPause
     } = this.dom;
 
-    familySel.onchange = () => {
+    familySel.onchange = async () => {
       this.userPickedGame = true;
       this.fillGames();
+      await this._ensureGameLoaded(this.gameKey);
       this.fillLevels();
       this.playing = true;
       playBtn.textContent = '⏸ Pause';
-      this.playLevel(0);
+      void this.playLevel(0);
     };
 
-    gameSel.onchange = () => {
+    gameSel.onchange = async () => {
       this.userPickedGame = true;
       this.gameKey = gameSel.value;
+      await this._ensureGameLoaded(this.gameKey);
       this.fillLevels();
       this.playing = true;
       playBtn.textContent = '⏸ Pause';
-      this.playLevel(0);
+      void this.playLevel(0);
     };
 
     jump.onchange = () => {
@@ -155,7 +159,7 @@ export class SolutionsController {
       playBtn.textContent = '⏸ Pause';
       const levels = this.curGame()?.levels || [];
       const ix = levels.findIndex((x) => x.lvl === parseInt(jump.value, 10));
-      this.playLevel(ix < 0 ? 0 : ix);
+      void this.playLevel(ix < 0 ? 0 : ix);
     };
 
     playBtn.onclick = () => this.togglePlay();
@@ -166,34 +170,37 @@ export class SolutionsController {
       if (this.narrOn && this.narrMap) {
         this.narrAudio.currentTime = 0;
       }
-      this.playLevel(this.cur);
+      void this.playLevel(this.cur);
     };
 
     narrBtn.onclick = () => {
       if (!this.narrMap) return;
-      if (this.narrOn) {
+      if (this.narrOn && !this.narrAutoplayBlocked) {
         this.narrOn = false;
         this.narrFF = false;
+        this.narrAutoplayBlocked = false;
         this._setNarrPref(true);
         this.narrAudio.pause();
         this._setNarrBtnText();
+        this._syncAudioButtons();
         this._emitScreen();
         return;
       }
       this.narrOn = true;
       this.narrFF = false;
+      this.narrAutoplayBlocked = false;
       this._setNarrPref(false);
       this.playing = true;
       playBtn.textContent = '⏸ Pause';
       this._setNarrBtnText();
       this.narrAudio.currentTime = 0;
-      this.playLevel(this.cur);
+      void this.playLevel(this.cur);
       this._tryStartNarrAudio();
     };
 
     narrPlayPause.onclick = () => {
       if (!this.narrMap) return;
-      if (!this.narrOn) {
+      if (!this.narrOn || this.narrAutoplayBlocked) {
         narrBtn.click();
         return;
       }
@@ -237,7 +244,7 @@ export class SolutionsController {
     });
 
     const narrKick = () => {
-      if (this.narrOn && this.narrMap && this.playing && this.narrAudio.paused) {
+      if (this.narrOn && !this.narrAutoplayBlocked && this.narrMap && this.playing && this.narrAudio.paused) {
         this._tryStartNarrAudio();
       }
     };
@@ -277,59 +284,110 @@ export class SolutionsController {
   }
 
   _setNarrBtnText() {
-    this.dom.narrBtn.textContent = this.narrOn ? '🔇 Narration: On' : '🔊 Narrate';
-    this.dom.narrBtn.classList.toggle('narr-on', this.narrOn);
+    if (this.narrOn && !this.narrAutoplayBlocked) {
+      this.dom.narrBtn.textContent = '🔇 Narration: On';
+      this.dom.narrBtn.classList.add('narr-on');
+    } else {
+      this.dom.narrBtn.textContent = '🔊 Narrate';
+      this.dom.narrBtn.classList.remove('narr-on');
+    }
   }
 
   _tryStartNarrAudio() {
     if (!this.narrOn || !this.narrMap) return;
     try {
       const p = this.narrAudio.play();
-      if (p && p.catch) p.catch(() => {});
-    } catch { /* autoplay blocked until gesture */ }
+      if (p && p.then) {
+        p.then(() => {
+          this.narrAutoplayBlocked = false;
+          this._setNarrBtnText();
+          this._syncAudioButtons();
+        }).catch(() => {
+          // Browser blocked autoplay before user gesture: don't freeze terminal replay
+          this.narrAutoplayBlocked = true;
+          this._setNarrBtnText();
+          this._syncAudioButtons();
+        });
+      }
+    } catch {
+      this.narrAutoplayBlocked = true;
+    }
+  }
+
+  async _ensureGameLoaded(key) {
+    const g = this.games[key];
+    if (!g || g._loaded) return;
+    if (this._gameFetchPromises.has(key)) {
+      return this._gameFetchPromises.get(key);
+    }
+    const p = fetch(`${SUBMODULE_BASE}/games/${key}.json`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data || !this.games[key]) return;
+        this.games[key].host = this.games[key].host || data.host;
+        this.games[key].levels = data.levels || [];
+        this.games[key].goals = data.goals || {};
+        this.games[key]._loaded = true;
+      })
+      .catch(() => {})
+      .finally(() => {
+        this._gameFetchPromises.delete(key);
+      });
+    this._gameFetchPromises.set(key, p);
+    return p;
   }
 
   async init() {
     const [banditHtml, manifestRes] = await Promise.all([
-      fetch(`${SUBMODULE_BASE}/index.html`, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : null)).catch(() => null),
-      fetch(`${SUBMODULE_BASE}/games/manifest.json`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`${SUBMODULE_BASE}/index.html`).then((r) => (r.ok ? r.text() : null)).catch(() => null),
+      fetch(`${SUBMODULE_BASE}/games/manifest.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
 
     if (banditHtml) {
       const bandit = parseBanditFromIndexHtml(banditHtml);
-      if (bandit) this.games.bandit = bandit;
+      if (bandit) {
+        bandit._loaded = true;
+        this.games.bandit = bandit;
+      }
     }
 
     if (manifestRes && Array.isArray(manifestRes.games)) {
-      const fetches = manifestRes.games.map(async (g) => {
-        if (this.games[g.key]) return;
-        try {
-          const r = await fetch(`${SUBMODULE_BASE}/games/${g.key}.json`, { cache: 'no-store' });
-          if (!r.ok) return;
-          const data = await r.json();
+      for (const g of manifestRes.games) {
+        if (!this.games[g.key]) {
           this.games[g.key] = {
             title: g.title,
-            host: g.host || data.host,
-            levels: data.levels || [],
-            goals: data.goals || {},
+            host: g.host || `${g.key}.labs.overthewire.org`,
+            levels: [],
+            goals: {},
+            _loaded: false,
           };
-        } catch { /* ignore unavailable game file */ }
-      });
-      await Promise.all(fetches);
+        }
+      }
     }
 
     if (!this.games[this.gameKey]) {
       const keys = Object.keys(this.games);
       if (keys.length) this.gameKey = keys[0];
     }
-    // Prefer Bandit L0 on startup (classic OverTheWire entry point with full narration)
     if (this.games.bandit && !this.userPickedGame) {
       this.gameKey = 'bandit';
     }
 
+    await this._ensureGameLoaded(this.gameKey);
     this.fillGames();
     this.fillLevels();
-    await this.playLevel(0);
+
+    // Fire level playback asynchronously — NEVER await the full level loop during init!
+    void this.playLevel(0);
+
+    // Hydrate remaining games in the background so dropdown level counts fill in smoothly
+    if (manifestRes && Array.isArray(manifestRes.games)) {
+      Promise.all(manifestRes.games.map((g) => this._ensureGameLoaded(g.key))).then(() => {
+        const curSelected = this.dom.gameSel.value;
+        this.fillGames();
+        if (curSelected) this.dom.gameSel.value = curSelected;
+      });
+    }
   }
 
   curGame() {
@@ -501,7 +559,13 @@ export class SolutionsController {
 
   _narrActive() {
     const curL = this.curGame()?.levels?.[this.cur];
-    return this.narrOn && this.narrMap && this.narrGame === this.gameKey && this.narrLevel === curL?.lvl;
+    return (
+      this.narrOn &&
+      !this.narrAutoplayBlocked &&
+      this.narrMap &&
+      this.narrGame === this.gameKey &&
+      this.narrLevel === curL?.lvl
+    );
   }
 
   async _narrGate(step, role, idx, my) {
@@ -510,7 +574,7 @@ export class SolutionsController {
     if (!e || e.t <= (this.narrAudio.currentTime || 0)) return;
     this.narrFF = false;
     while (this.narrAudio.paused || (this.narrAudio.currentTime || 0) < e.t) {
-      if (my !== this.runId || !this.narrOn) return;
+      if (my !== this.runId || !this.narrOn || this.narrAutoplayBlocked) return;
       await new Promise((r) => setTimeout(r, 60));
     }
   }

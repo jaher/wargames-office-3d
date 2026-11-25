@@ -41,21 +41,28 @@ function setActiveCamButton(camButtons, preset) {
   }
 }
 
-async function bootstrap() {
-  const dom = getDom();
+function hideLoadingOverlay(dom) {
+  if (!dom.loadingOverlay) return;
+  dom.loadingOverlay.classList.add('hidden');
+}
 
+function bootstrap() {
+  const dom = getDom();
   const omarchyScreen = new OmarchyScreen();
   let office = null;
 
   try {
-    dom.loadingStatus.textContent = 'Building 3D office, Corsair RTX 5090 rig & 8× DGX Spark cluster…';
+    dom.loadingStatus.textContent = 'Building 3D office…';
     office = new OfficeScene(dom.canvas, omarchyScreen, (preset) => {
       setActiveCamButton(dom.camButtons, preset);
     });
     office.start();
+    // Reveal the 3D scene immediately on the first painted frame — never block on network fetches!
+    requestAnimationFrame(() => hideLoadingOverlay(dom));
   } catch (err) {
     console.error('3D scene initialization failed:', err);
-    dom.loadingStatus.textContent = `WebGL initialization error: ${err?.message || err}`;
+    dom.loadingStatus.textContent = `WebGL error: ${err?.message || err}`;
+    setTimeout(() => hideLoadingOverlay(dom), 2600);
   }
 
   // Camera preset buttons
@@ -68,7 +75,7 @@ async function bootstrap() {
     });
   }
 
-  // "3D Focus" button in terminal chrome zooms right onto the Omarchy monitor
+  // "3D Focus" button zooms camera directly onto the Omarchy Linux monitor
   dom.focusMonitorBtn.addEventListener('click', () => {
     if (!office) return;
     office.goToPreset('monitor');
@@ -87,7 +94,6 @@ async function bootstrap() {
     const collapsed = dom.app.classList.toggle('panel-collapsed');
     dom.togglePanelBtn.textContent = collapsed ? 'Show Panel' : 'Hide Panel';
     if (office) {
-      // Resize across CSS transition so canvas never stretches
       office.resize();
       setTimeout(() => office.resize(), 140);
       setTimeout(() => office.resize(), 280);
@@ -95,7 +101,7 @@ async function bootstrap() {
   };
   dom.togglePanelBtn.addEventListener('click', togglePanel);
 
-  // Keyboard shortcuts: 1-5 camera presets, P toggles panel
+  // Keyboard shortcuts: 1-5 camera presets, P toggles side panel
   window.addEventListener('keydown', (e) => {
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
@@ -127,22 +133,16 @@ async function bootstrap() {
     if (office) office.resize();
   });
 
-  // Initialize OverTheWire solutions & voice narration controller
-  dom.loadingStatus.textContent = 'Loading OverTheWire solutions & voice narration…';
+  // Load OverTheWire solutions & voice narration asynchronously in the background
   const solutions = new SolutionsController(dom, (screenState) => {
     omarchyScreen.update(screenState);
   });
 
-  try {
-    await solutions.init();
-  } catch (err) {
+  solutions.init().catch((err) => {
     console.error('Failed to load OverTheWire solutions:', err);
-    dom.hudNowPlaying.textContent = 'Failed to load solutions';
+    dom.hudNowPlaying.textContent = 'Solutions unavailable';
     dom.statusBadge.textContent = 'Offline';
-  }
-
-  // Fade out loading screen smoothly
-  dom.loadingOverlay.classList.add('hidden');
+  });
 }
 
 bootstrap();
