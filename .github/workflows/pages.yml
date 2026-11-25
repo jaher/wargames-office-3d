@@ -54,6 +54,15 @@ jobs:
         with:
           path: '.'
 
+      - name: Debug: list artifacts with GITHUB_TOKEN
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "run_id=${{ github.run_id }}"
+          curl -s -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?run_id=$GITHUB_RUN_ID&per_page=100" \
+            | python3 -m json.tool | head -40
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
