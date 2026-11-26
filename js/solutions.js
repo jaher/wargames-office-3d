@@ -125,6 +125,7 @@ export class SolutionsController {
     this.activeNarrSeg = -1;
     this.activeSecrets = [];
     this._gameFetchPromises = new Map();
+    this._selectTok = 0;
 
     this._bindEvents();
   }
@@ -136,9 +137,17 @@ export class SolutionsController {
     } = this.dom;
 
     familySel.onchange = async () => {
+      const selTok = ++this._selectTok;
       this.userPickedGame = true;
+      ++this.runId;
+      this._stopNarration();
       this.fillGames();
-      await this._ensureGameLoaded(this.gameKey);
+      const targetKey = this.gameKey;
+      this._showLoadingGame(targetKey);
+      await this._ensureGameLoaded(targetKey);
+      if (selTok !== this._selectTok) return;
+      this.gameKey = targetKey;
+      this.fillGames();
       this.fillLevels();
       this.playing = true;
       playBtn.textContent = '‖ Pause';
@@ -146,9 +155,16 @@ export class SolutionsController {
     };
 
     gameSel.onchange = async () => {
+      const selTok = ++this._selectTok;
       this.userPickedGame = true;
-      this.gameKey = gameSel.value;
-      await this._ensureGameLoaded(this.gameKey);
+      const targetKey = gameSel.value;
+      this.gameKey = targetKey;
+      ++this.runId;
+      this._stopNarration();
+      this._showLoadingGame(targetKey);
+      await this._ensureGameLoaded(targetKey);
+      if (selTok !== this._selectTok) return;
+      this.gameKey = targetKey;
       this.fillLevels();
       this.playing = true;
       playBtn.textContent = '‖ Pause';
@@ -156,10 +172,13 @@ export class SolutionsController {
     };
 
     jump.onchange = () => {
+      ++this._selectTok;
+      this.userPickedGame = true;
       this.playing = true;
       playBtn.textContent = '‖ Pause';
       const levels = this.curGame()?.levels || [];
-      const ix = levels.findIndex((x) => x.lvl === parseInt(jump.value, 10));
+      const wanted = String(jump.value);
+      const ix = levels.findIndex((x) => String(x.lvl) === wanted);
       void this.playLevel(ix < 0 ? 0 : ix);
     };
 
@@ -243,6 +262,14 @@ export class SolutionsController {
       this._narrClearHL();
       this._emitScreen();
     });
+    this.narrAudio.addEventListener('error', () => {
+      // Never let a missing/failed narration audio file stall terminal playback
+      this.narrAutoplayBlocked = true;
+      this.narrOn = false;
+      this._setNarrBtnText();
+      this._syncAudioButtons();
+      this._emitScreen();
+    });
 
     const narrKick = () => {
       if (this.narrOn && !this.narrAutoplayBlocked && this.narrMap && this.playing && this.narrAudio.paused) {
@@ -251,6 +278,43 @@ export class SolutionsController {
     };
     document.addEventListener('pointerdown', narrKick);
     document.addEventListener('keydown', narrKick);
+  }
+
+  _stopNarration() {
+    ++this.narrLoadTok;
+    this.narrLevelKey = '';
+    this.narrMap = null;
+    this.narrOn = false;
+    this.narrFF = false;
+    this.narrAutoplayBlocked = false;
+    this.activeNarrSeg = -1;
+    this.narrAudio.pause();
+    this.narrAudio.removeAttribute('src');
+    this.dom.narrBtn.style.display = 'none';
+    this.dom.narrBar.classList.remove('on');
+    this.dom.transcriptWrap.style.display = 'none';
+    this.dom.narrTranscript.innerHTML = '';
+    this.dom.narrSeg.textContent = '';
+    this._setNarrBtnText();
+    this._syncAudioButtons();
+  }
+
+  _showLoadingGame(key) {
+    const g = this.games[key];
+    if (!g || g._loaded) return;
+    const cleanTitle = g.title.replace(/ \(SmashTheStack\)$/, '');
+    const titleStr = `${cleanTitle.toUpperCase()} — LOADING…`;
+    this.screenHeader = titleStr;
+    this.screenHost = `${key}@${g.host || 'overthewire.org'}`;
+    this.screenGoal = `Loading ${cleanTitle} solutions…`;
+    this.screenLines = [{ kind: 'note', text: `Loading ${cleanTitle} mission data…` }];
+    this.screenVim = null;
+    this.screenLastVim = null;
+    this.dom.hudNowPlaying.textContent = titleStr;
+    this.dom.termTitle.textContent = `omarchy :: ghostty — ${cleanTitle}`;
+    this.dom.statusBadge.textContent = 'Loading…';
+    this.dom.term.innerHTML = `<div class="note">Loading ${escapeHtml(cleanTitle)} mission data…</div>`;
+    this._emitScreen();
   }
 
   togglePlay() {
@@ -268,19 +332,21 @@ export class SolutionsController {
     this.dom.narrPlayPause.textContent = isPlayingAudio ? '‖' : '▶';
   }
 
+  // Narration is opt-in so selecting any level immediately shows & replays its
+  // solution on the 3D monitor instead of freezing behind a voiceover timeline.
   _narrPrefOff() {
     try {
-      return typeof localStorage !== 'undefined' && localStorage.getItem(NARR_PREF_KEY) === 'off';
+      return typeof localStorage === 'undefined' || localStorage.getItem(NARR_PREF_KEY) !== 'on';
     } catch {
-      return false;
+      return true;
     }
   }
 
   _setNarrPref(off) {
     try {
       if (typeof localStorage === 'undefined') return;
-      if (off) localStorage.setItem(NARR_PREF_KEY, 'off');
-      else localStorage.removeItem(NARR_PREF_KEY);
+      if (off) localStorage.removeItem(NARR_PREF_KEY);
+      else localStorage.setItem(NARR_PREF_KEY, 'on');
     } catch { /* ignore */ }
   }
 
@@ -381,17 +447,27 @@ export class SolutionsController {
     void this.playLevel(0);
 
     // Hydrate remaining games in the background so dropdown level counts fill in smoothly
+    // without disrupting any mission/level the user already chose.
     if (manifestRes && Array.isArray(manifestRes.games)) {
       Promise.all(manifestRes.games.map((g) => this._ensureGameLoaded(g.key))).then(() => {
-        const curSelected = this.dom.gameSel.value;
-        this.fillGames();
-        if (curSelected) this.dom.gameSel.value = curSelected;
+        this._refreshGameOptionLabels();
       });
     }
   }
 
   curGame() {
     return this.games[this.gameKey];
+  }
+
+  _refreshGameOptionLabels() {
+    const { gameSel } = this.dom;
+    for (const opt of gameSel.options) {
+      const g = this.games[opt.value];
+      if (!g) continue;
+      const lvlCount = (g.levels || []).length;
+      const cleanTitle = g.title.replace(/ \(SmashTheStack\)$/, '');
+      opt.textContent = `${cleanTitle} (${lvlCount})`;
+    }
   }
 
   fillGames() {
@@ -416,7 +492,9 @@ export class SolutionsController {
     }
 
     if (keys.length && !keys.includes(this.gameKey)) {
-      this.gameKey = keys[0];
+      // Prefer a mission with solved levels when switching wargame family
+      const withLevels = keys.find((k) => (this.games[k].levels || []).length > 0);
+      this.gameKey = withLevels || keys[0];
     }
     gameSel.value = this.gameKey;
   }
@@ -562,9 +640,10 @@ export class SolutionsController {
     return (
       this.narrOn &&
       !this.narrAutoplayBlocked &&
+      !this.narrAudio.error &&
       this.narrMap &&
       this.narrGame === this.gameKey &&
-      this.narrLevel === curL?.lvl
+      String(this.narrLevel) === String(curL?.lvl)
     );
   }
 
@@ -573,8 +652,22 @@ export class SolutionsController {
     const e = this.narrLineTime.get(this._narrKey(step, role, idx));
     if (!e || e.t <= (this.narrAudio.currentTime || 0)) return;
     this.narrFF = false;
+    let pausedTicks = 0;
     while (this.narrAudio.paused || (this.narrAudio.currentTime || 0) < e.t) {
-      if (my !== this.runId || !this.narrOn || this.narrAutoplayBlocked) return;
+      if (my !== this.runId || !this.narrOn || this.narrAutoplayBlocked || this.narrAudio.error) return;
+      // If user is playing but audio remains stalled/paused (e.g. blocked or buffering error),
+      // release the gate after ~1.5s so the terminal never freezes.
+      if (this.playing && this.narrAudio.paused) {
+        pausedTicks++;
+        if (pausedTicks > 25) {
+          this.narrAutoplayBlocked = true;
+          this._setNarrBtnText();
+          this._syncAudioButtons();
+          return;
+        }
+      } else {
+        pausedTicks = 0;
+      }
       await new Promise((r) => setTimeout(r, 60));
     }
   }
@@ -620,12 +713,15 @@ export class SolutionsController {
     this.narrLevelKey = key;
     this.narrMap = null;
     this.narrOn = false;
+    this.narrFF = false;
+    this.narrAutoplayBlocked = false;
     this.activeNarrSeg = -1;
     this.narrAudio.pause();
     this.dom.narrBtn.style.display = 'none';
     this.dom.narrBar.classList.remove('on');
     this.dom.transcriptWrap.style.display = 'none';
     this.dom.narrTranscript.innerHTML = '';
+    this.dom.narrSeg.textContent = '';
     this._setNarrBtnText();
 
     try {
@@ -1069,46 +1165,45 @@ export class SolutionsController {
   }
 
   async playLevel(idx) {
+    // Always invalidate any in-flight replay loop FIRST (even for 0-level missions)
+    const my = ++this.runId;
     const G = this.curGame();
     if (!G || !G.levels || !G.levels.length) {
+      this._stopNarration();
+      const cleanTitle = G ? G.title.replace(/ \(SmashTheStack\)$/, '') : 'Wargames';
       this.dom.term.innerHTML = '<div class="note">No solved levels recorded for this mission yet.</div>';
-      this.screenHeader = `${G ? G.title.toUpperCase() : 'WARGAMES'} — NO LEVELS YET`;
-      this.screenGoal = '';
-      this.screenLines = [{ kind: 'note', text: 'No solved levels recorded for this mission yet.' }];
+      this.screenHeader = `${cleanTitle.toUpperCase()} — NO LEVELS YET`;
+      this.screenHost = `${this.gameKey}@${G?.host || 'overthewire.org'}`;
+      this.screenGoal = `No solved levels recorded for ${cleanTitle} yet.`;
+      this.screenLines = [{ kind: 'note', text: `No solved levels recorded for ${cleanTitle} yet.` }];
       this.screenVim = null;
+      this.screenLastVim = null;
       this.dom.hudNowPlaying.textContent = this.screenHeader;
+      this.dom.termTitle.textContent = `omarchy :: ghostty — ${cleanTitle}`;
       this.dom.statusBadge.textContent = '0 levels';
+      this.dom.fill.style.width = '0%';
       this._emitScreen();
       return;
     }
 
     const L = G.levels[idx];
     if (!L) return;
-    const my = ++this.runId;
     this.cur = idx;
     this.activeSecrets = this._buildSecretList(G, L);
 
-    if (`${this.gameKey}:${L.lvl}` !== this.narrLevelKey) {
-      await this._loadNarration(this.gameKey, L.lvl);
-    }
-    if (my !== this.runId) return;
-
-    const myNarr = this.narrOn && this.narrMap && this.narrGame === this.gameKey && this.narrLevel === L.lvl;
-    if (myNarr) {
-      this.narrFF = true;
-      this._tryStartNarrAudio();
-    } else {
-      this.narrFF = false;
-    }
-
+    // Synchronously update BOTH the DOM terminal AND the 3D Omarchy monitor BEFORE
+    // any async fetch/delay so the monitor always immediately reflects the chosen level.
     const cleanTitle = G.title.replace(/ \(SmashTheStack\)$/, '');
     const titleStr = `${cleanTitle.toUpperCase()} — LEVEL ${L.lvl}`;
+    const desc = this.redactText((G.goals && G.goals[L.lvl]) || L.goal || '');
     this.screenHeader = titleStr;
     this.screenHost = `${L.user || this.gameKey}@${G.host || 'overthewire.org'}`;
+    this.screenGoal = desc;
     this.screenLines = [];
     this.screenVim = null;
     this.screenLastVim = null;
-    // Pre-populate final source file preview if this level edits a file in vim, so the 3D Omarchy split pane starts rich & full!
+
+    // Pre-populate source file preview ONLY if this level edits a file in vim
     if (L.steps) {
       const firstVimStep = L.steps.find((s) => this._vimFileOf(s));
       if (firstVimStep) {
@@ -1139,11 +1234,7 @@ export class SolutionsController {
     this.dom.fill.style.width = `${pct}%`;
     this.dom.term.innerHTML = '';
 
-    await this._narrGate(-1, 'goal', undefined, my);
-    if (my !== this.runId) return;
-
-    const desc = this.redactText((G.goals && G.goals[L.lvl]) || L.goal || '');
-    this.screenGoal = desc;
+    // Immediately show the chosen level's header, problem statement, and host banner
     const goalEntry = { kind: 'goal', text: `${titleStr}${desc ? `\n${desc}` : ''}`, segs: null };
     const gd = this._appendLine(
       `${escapeHtml(titleStr)} — PROBLEM STATEMENT${desc ? `\n${this._renderSafeHtml(desc)}` : ''}`,
@@ -1151,7 +1242,6 @@ export class SolutionsController {
       false,
       goalEntry
     );
-    this._tagNarr(gd, -1, 'goal', undefined, goalEntry);
 
     const hostTag = `${L.user}@${this._flatCmds(L).some((c) => c.trim().startsWith('ssh ')) ? (G.host || 'bandit.labs.overthewire.org') : 'omarchy'}`;
     this._appendLine(`<span class="note">── ${escapeHtml(hostTag)} ──</span>`, 'note', false, {
@@ -1159,7 +1249,35 @@ export class SolutionsController {
       text: `── ${hostTag} ──`,
     });
 
-    await this._delay(420 * this._speed());
+    // Load narration metadata without blocking the instant monitor switch:
+    // only await narration sync if the user explicitly enabled voice narration.
+    const levelKey = `${this.gameKey}:${L.lvl}`;
+    if (levelKey !== this.narrLevelKey) {
+      const narrPromise = this._loadNarration(this.gameKey, L.lvl);
+      if (!this._narrPrefOff()) {
+        await narrPromise;
+        if (my !== this.runId) return;
+      } else {
+        void narrPromise;
+      }
+    }
+
+    const myNarr =
+      this.narrOn &&
+      !this.narrAutoplayBlocked &&
+      this.narrMap &&
+      this.narrGame === this.gameKey &&
+      String(this.narrLevel) === String(L.lvl);
+    if (myNarr) {
+      this._tagNarr(gd, -1, 'goal', undefined, goalEntry);
+      this.narrFF = true;
+      this._tryStartNarrAudio();
+    } else {
+      this.narrFF = false;
+    }
+
+    await this._delay(120 * this._speed());
+    if (my !== this.runId) return;
 
     if (L.steps) {
       let si = 0;
@@ -1263,12 +1381,11 @@ export class SolutionsController {
       });
     }
 
-    await this._delay(1200 * this._speed());
+    await this._delay(600 * this._speed());
     if (my !== this.runId) return;
-    if (!myNarr && idx + 1 < G.levels.length && this.playing) {
-      this.playLevel(idx + 1);
-    } else if (!myNarr && idx + 1 >= G.levels.length) {
-      this.dom.statusBadge.textContent = `${cleanTitle} Complete`;
-    }
+    // Stay pinned on the selected level once its solution finishes so the monitor
+    // terminal always matches the level shown in the dropdowns.
+    this.dom.statusBadge.textContent = `Level ${L.lvl} / ${G.levels[G.levels.length - 1].lvl} · Solved`;
+    this._emitScreen();
   }
 }

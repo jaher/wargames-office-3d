@@ -21,27 +21,33 @@ export class OmarchyScreen {
     this.texture.magFilter = THREE.LinearFilter;
 
     this.state = {
-      header: 'VORTEX — LEVEL 0',
-      host: 'vortex0@vortex.labs.overthewire.org',
+      header: 'OMARCHY WORKSTATION',
+      host: 'omarchy@workstation',
       goal: 'Loading OverTheWire solutions…',
       lines: [{ kind: 'note', text: 'Booting Omarchy Linux (Hyprland / Wayland)…' }],
       vim: null,
+      lastVim: null,
       activeNarrSeg: -1,
       narrating: false,
       narrCaption: '',
     };
 
     this._lastDraw = 0;
+    this._lastElapsed = 0;
     this._dirty = true;
     this.render(0);
   }
 
   update(state) {
-    this.state = state;
+    this.state = {
+      ...state,
+      lines: Array.isArray(state?.lines) ? [...state.lines] : [],
+    };
     this._dirty = true;
   }
 
   tick(elapsed) {
+    this._lastElapsed = elapsed;
     if (this._dirty || elapsed - this._lastDraw > 0.35) {
       this.render(elapsed);
       this._lastDraw = elapsed;
@@ -523,11 +529,15 @@ export class OmarchyScreen {
     ctx.font = '700 16px "JetBrains Mono", monospace';
     ctx.fillText('PROC · NET 200GbE (enp4s0)', bx + 16, procY + 4);
 
+    const hostRaw = this.state.host || 'omarchy@workstation';
+    const [hostUser, hostDomain = 'otw'] = hostRaw.split('@');
+    const shortDomain = hostDomain.includes('smashthestack') ? 's2s' : hostDomain.includes('overthewire') ? 'otw' : hostDomain.split('.')[0];
+    const sshCmd = `ssh ${hostUser}@${shortDomain}`.slice(0, 19).padEnd(19, ' ');
     const procs = [
       ['PID   COMMAND             MEM    CPU%', TN.comment],
       ['1042  hyprland --wayland  412M   2.1%', TN.fgBright],
       ['1188  ghostty -e tmux     196M   0.8%', TN.cyan],
-      ['2401  ssh vortex0@otw      24M   0.2%', TN.green],
+      [`2401  ${sshCmd}  24M   0.2%`, TN.green],
       ['3110  dgx-spark-rdma      4.8G   9.4%', TN.amber],
     ];
     procs.forEach(([txt, col], idx) => {
@@ -549,7 +559,10 @@ export class OmarchyScreen {
 
     ctx.fillStyle = TN.fgBright;
     ctx.font = '600 17px "JetBrains Mono", monospace';
-    const captionText = this.state.narrCaption || this.state.goal || 'Select a mission and level to replay.';
+    const fallbackObjective = this.state.header
+      ? `${this.state.header}${this.state.host ? ` · ${this.state.host}` : ''}`
+      : 'Select a mission and level to replay.';
+    const captionText = this.state.narrCaption || this.state.goal || fallbackObjective;
     const capLines = this._wrapText(ctx, captionText, bw - 28);
     let cy = footY + 30;
     for (const ln of capLines.slice(0, 2)) {
@@ -627,7 +640,10 @@ export class OmarchyScreen {
     ctx.font = '700 15px "JetBrains Mono", monospace';
     ctx.fillText(`  ${lastVim.file}  `, x, y + 19);
     ctx.fillStyle = TN.comment;
-    ctx.fillText('  [utf-8 · unix · c]', x + 178, y + 19);
+    const ext = String(lastVim.file || '').split('.').pop().toLowerCase();
+    const ftMap = { c: 'c', h: 'c', py: 'python', sh: 'sh', php: 'php', pl: 'perl', rb: 'ruby', js: 'js', s: 'asm', asm: 'asm' };
+    const ft = ftMap[ext] || 'text';
+    ctx.fillText(`  [utf-8 · unix · ${ft}]`, x + 178, y + 19);
 
     const rowH = 26;
     const lualineH = 30;
@@ -785,7 +801,7 @@ export class OmarchyScreen {
 
     if (!slice.some((r) => r.typing)) {
       const lastCmd = [...(this.state.lines || [])].reverse().find((l) => l.kind === 'cmd' && l.prompt);
-      const promptStr = lastCmd ? lastCmd.prompt : `${(this.state.host || 'vortex0@omarchy').split('.')[0]}:~$ `;
+      const promptStr = lastCmd ? lastCmd.prompt : `${(this.state.host || 'omarchy@workstation').split('.')[0]}:~$ `;
       const py = Math.min(y + 4, innerY + innerH - 10);
       ctx.fillStyle = TN.cyan;
       ctx.fillText(promptStr, innerX, py);
