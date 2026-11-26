@@ -1030,6 +1030,8 @@ export class OfficeScene {
     this.switchLeds = [];
     this.pcEmissives = [];
     this.spinningFans = [];
+    this.lavaBlobs = [];
+    this.lavaLight = null;
     this.sunBeams = [];
     this.clickableMeshes = [];
     this.dustPoints = null;
@@ -1825,50 +1827,338 @@ export class OfficeScene {
       shelfGroup.add(board);
     }
 
-    const rng = mulberry32(909);
-    const bookColors = [
-      0x274060, 0x8c3b32, 0x2e5b4f, 0xc79248, 0x3b354d,
-      0x5d432c, 0x1f3a52, 0xa8583b, 0x4b5d4e, 0xd4c7b0,
-      0x262d38, 0x7a2e45,
+    // Curated CS & Springer Mathematics Bookshelf (Knuth TAOCP, Architecture, OS, Springer GTM/UTM/SUMS, Systems)
+    const createBookSpineTexture = (spec) => {
+      const c = document.createElement('canvas');
+      c.width = 128;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+      const W = c.width;
+      const H = c.height;
+
+      // Base cloth/hardcover color with subtle vertical spine shading & linen grain
+      const grad = ctx.createLinearGradient(0, 0, W, 0);
+      grad.addColorStop(0.0, 'rgba(0,0,0,0.22)');
+      grad.addColorStop(0.14, 'rgba(255,255,255,0.06)');
+      grad.addColorStop(0.5, 'rgba(255,255,255,0.0)');
+      grad.addColorStop(0.86, 'rgba(0,0,0,0.08)');
+      grad.addColorStop(1.0, 'rgba(0,0,0,0.28)');
+
+      ctx.fillStyle = spec.bg;
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Subtle cloth weave speckles
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      for (let y = 0; y < H; y += 6) {
+        ctx.fillRect(0, y, W, 1);
+      }
+
+      const style = spec.style || 'classic';
+      if (style === 'gtm') {
+        // Iconic Springer GTM: bright yellow spine + signature white top series band + black typography!
+        ctx.fillStyle = '#f8f8f5';
+        ctx.fillRect(0, 18, W, 72);
+        ctx.fillStyle = '#181a1f';
+        ctx.fillRect(0, 18, W, 3);
+        ctx.fillRect(0, 88, W, 3);
+        ctx.font = '700 18px "Inter", "DejaVu Sans", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('GTM', W / 2, 46);
+        ctx.font = '700 26px "Inter", "DejaVu Sans", sans-serif';
+        ctx.fillText(spec.vol || '', W / 2, 76);
+
+        // Springer bottom band
+        ctx.fillStyle = '#181a1f';
+        ctx.fillRect(10, H - 56, W - 20, 2);
+        ctx.font = '700 16px "Georgia", serif';
+        ctx.fillText('Springer', W / 2, H - 28);
+      } else if (style === 'utm') {
+        // Classic Springer UTM: crisp white spine + yellow/blue top accent band!
+        ctx.fillStyle = '#f2c828';
+        ctx.fillRect(0, 16, W, 56);
+        ctx.fillStyle = '#15325c';
+        ctx.fillRect(0, 72, W, 6);
+        ctx.font = '700 22px "Inter", "DejaVu Sans", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('UTM', W / 2, 52);
+
+        ctx.fillStyle = '#15325c';
+        ctx.fillRect(10, H - 56, W - 20, 2);
+        ctx.font = '700 16px "Georgia", serif';
+        ctx.fillText('Springer', W / 2, H - 28);
+      } else if (style === 'sums') {
+        // Classic Springer SUMS: rich royal blue spine + crisp white top block + Springer mark!
+        ctx.fillStyle = '#f6f7fa';
+        ctx.fillRect(0, 16, W, 62);
+        ctx.fillStyle = '#194d8c';
+        ctx.font = '700 22px "Inter", "DejaVu Sans", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('SUMS', W / 2, 54);
+
+        ctx.fillStyle = '#f6f7fa';
+        ctx.fillRect(10, H - 56, W - 20, 2);
+        ctx.font = '700 16px "Georgia", serif';
+        ctx.fillText('Springer', W / 2, H - 28);
+      } else if (style === 'knuth') {
+        // Iconic Addison-Wesley Knuth TAOCP: matte black cloth + double gold bands + crisp gold serif lettering!
+        ctx.fillStyle = '#d8b24c';
+        ctx.fillRect(8, 22, W - 16, 4);
+        ctx.fillRect(8, 30, W - 16, 2);
+        ctx.fillRect(8, 96, W - 16, 2);
+        ctx.fillRect(8, H - 72, W - 16, 2);
+        ctx.fillRect(8, H - 30, W - 16, 4);
+        ctx.textAlign = 'center';
+        ctx.font = '700 22px "Georgia", serif';
+        ctx.fillText(spec.vol || 'VOL. 1', W / 2, 68, W - 14);
+        ctx.font = '600 14px "Georgia", serif';
+        ctx.fillText('ADDISON-WESLEY', W / 2, H - 46, W - 14);
+      } else {
+        // Classic CS Textbook (top/bottom color bands + publisher footer)
+        if (spec.band) {
+          ctx.fillStyle = spec.band;
+          ctx.fillRect(0, 20, W, 44);
+          ctx.fillRect(0, H - 56, W, 18);
+        }
+        if (spec.vol) {
+          ctx.fillStyle = spec.bandFg || spec.fg || '#f4f0e6';
+          ctx.textAlign = 'center';
+          ctx.font = '700 18px "Inter", "DejaVu Sans", sans-serif';
+          ctx.fillText(spec.vol, W / 2, 48, W - 12);
+        }
+        if (spec.pub) {
+          ctx.fillStyle = spec.fg || '#f4f0e6';
+          ctx.textAlign = 'center';
+          ctx.font = '700 13px "Inter", "DejaVu Sans", sans-serif';
+          ctx.fillText(spec.pub, W / 2, H - 20, W - 12);
+        }
+      }
+
+      // Vertical title + author along the spine center (readable top-to-bottom like real US/EU books!)
+      ctx.save();
+      ctx.translate(W / 2, H * 0.51);
+      ctx.rotate(Math.PI / 2);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const fg = spec.fg || (style === 'gtm' || style === 'utm' ? '#15171c' : '#f4f0e6');
+      ctx.fillStyle = fg;
+      const titleStr = spec.title || '';
+      const authorStr = spec.author || '';
+      const fontFamily = (style === 'gtm' || style === 'knuth') ? '"Georgia", serif' : '"Inter", "DejaVu Sans", sans-serif';
+      const titleSize = titleStr.length > 26 ? 19 : titleStr.length > 18 ? 22 : 25;
+      ctx.font = `700 ${titleSize}px ${fontFamily}`;
+      ctx.fillText(titleStr, 0, authorStr ? -14 : 0, 315);
+
+      if (authorStr) {
+        ctx.fillStyle = spec.authorFg || (style === 'knuth' ? '#f2ebd4' : fg);
+        ctx.globalAlpha = 0.86;
+        ctx.font = `600 15px ${fontFamily}`;
+        ctx.fillText(authorStr, 0, 16, 300);
+      }
+      ctx.restore();
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+      return tex;
+    };
+
+    const pageMat = new THREE.MeshStandardMaterial({ color: 0xe6dfd0, roughness: 0.88 });
+    const addBook = (parent, xLeft, baseY, spec) => {
+      const bw = spec.w || 0.036;
+      const bh = spec.h || 0.245;
+      const bd = spec.d || 0.195;
+      const zOff = spec.zOff || 0;
+      const tiltZ = spec.tilt || 0;
+
+      const spineTex = createBookSpineTexture(spec);
+      const boardMat = new THREE.MeshStandardMaterial({ color: spec.bg, roughness: 0.68, metalness: 0.04 });
+      const spineMat = new THREE.MeshStandardMaterial({ map: spineTex, roughness: 0.58, metalness: 0.04 });
+
+      // BoxGeometry face order: +X (right cover), -X (left cover), +Y (top pages), -Y (bottom pages), +Z (SPINE facing room!), -Z (fore-edge pages)
+      const mats = [boardMat, boardMat, pageMat, pageMat, spineMat, pageMat];
+      const book = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), mats);
+      book.position.set(xLeft + bw / 2, baseY + bh / 2 + 0.0005, 0.035 + zOff);
+      book.rotation.z = tiltZ;
+      book.castShadow = true;
+      book.receiveShadow = true;
+      parent.add(book);
+      return bw + 0.003;
+    };
+
+    const addDecorVase = (parent, xLeft, baseY, colHex) => {
+      const vase = new THREE.Mesh(
+        new THREE.LatheGeometry(
+          [
+            new THREE.Vector2(0.032, 0),
+            new THREE.Vector2(0.056, 0.075),
+            new THREE.Vector2(0.044, 0.15),
+            new THREE.Vector2(0.025, 0.195),
+            new THREE.Vector2(0.033, 0.215),
+          ],
+          20
+        ),
+        new THREE.MeshStandardMaterial({ color: colHex, roughness: 0.42 })
+      );
+      vase.position.set(xLeft + 0.075, baseY + 0.0005, 0.03);
+      vase.castShadow = true;
+      parent.add(vase);
+      return 0.16;
+    };
+
+    const shelvesCatalog = [
+      // Shelf 0 (bottom, y=0.14): Networking, Security, Distributed Systems & Classic Reference
+      [
+        { title: 'TCP/IP ILLUSTRATED VOL. 1', author: 'W. R. STEVENS', bg: '#1e3554', band: '#c8a654', fg: '#f4f0e6', pub: 'ADDISON-WESLEY', w: 0.046, h: 0.248 },
+        { title: 'TCP/IP ILLUSTRATED VOL. 2', author: 'WRIGHT & STEVENS', bg: '#1a2f4a', band: '#c8a654', fg: '#f4f0e6', pub: 'ADDISON-WESLEY', w: 0.054, h: 0.248 },
+        { title: 'UNIX NETWORK PROGRAMMING', author: 'W. R. STEVENS', bg: '#213a58', band: '#b83c32', fg: '#f4f0e6', pub: 'ADDISON-WESLEY', w: 0.050, h: 0.248 },
+        { title: 'DESIGNING DATA-INTENSIVE APPS', author: 'M. KLEPPMANN', bg: '#f3f1eb', band: '#c62828', fg: '#16181e', bandFg: '#ffffff', pub: "O'REILLY", w: 0.044, h: 0.238 },
+        { title: 'COMPUTER NETWORKS', author: 'TANENBAUM', bg: '#1b4f5c', band: '#e0a938', fg: '#f4f6f8', pub: 'PEARSON', w: 0.048, h: 0.245 },
+        { title: 'SYSTEMS PERFORMANCE', author: 'BRENDAN GREGG', bg: '#6e1d26', band: '#1b1d22', fg: '#f5efe6', pub: 'ADDISON-WESLEY', w: 0.048, h: 0.245 },
+        { title: 'HACKING: ART OF EXPLOITATION', author: 'JON ERICKSON', bg: '#15181e', band: '#2e9e56', fg: '#e8f5ec', pub: 'NO STARCH', w: 0.036, h: 0.236 },
+        { title: 'PRACTICAL BINARY ANALYSIS', author: 'D. ANDRIESSE', bg: '#181a20', band: '#d98c24', fg: '#f4f2ec', pub: 'NO STARCH', w: 0.038, h: 0.236 },
+        { title: "SHELLCODER'S HANDBOOK", author: 'ANLEY ET AL.', bg: '#5a1e28', band: '#d4b46a', fg: '#f6f2ea', pub: 'WILEY', w: 0.044, h: 0.238 },
+        { title: 'SERIOUS CRYPTOGRAPHY', author: 'J.-P. AUMASSON', bg: '#171c26', band: '#3296c8', fg: '#eef6fc', pub: 'NO STARCH', w: 0.032, h: 0.236 },
+        { title: "HACKER'S DELIGHT", author: 'H. S. WARREN', bg: '#214536', band: '#d4b252', fg: '#f4f0e4', pub: 'ADDISON-WESLEY', w: 0.038, h: 0.242 },
+        { title: 'DATABASE INTERNALS', author: 'ALEX PETROV', bg: '#f2f0ea', band: '#34498a', fg: '#161820', pub: "O'REILLY", w: 0.034, h: 0.236 },
+        { title: 'CRAFTING INTERPRETERS', author: 'R. NYSTROM', bg: '#ede4d4', band: '#b84a2a', fg: '#231d18', pub: 'GENE VERD', w: 0.040, h: 0.240 },
+        { title: 'PRINCIPLES OF MATH. ANALYSIS', author: 'WALTER RUDIN', bg: '#4e7ca8', band: '#1b314a', fg: '#f6f8fc', pub: 'MCGRAW-HILL', w: 0.030, h: 0.228 },
+        { title: 'ALGEBRA', author: 'MICHAEL ARTIN', bg: '#632632', band: '#d9c59a', fg: '#f6f0e4', pub: 'PEARSON', w: 0.044, h: 0.242 },
+        { title: 'THE UNIX PROG. ENVIRONMENT', author: 'KERNIGHAN & PIKE', bg: '#f4f2ec', band: '#28568f', fg: '#161a22', pub: 'PRENTICE HALL', w: 0.028, h: 0.232 },
+        { title: 'CODE COMPLETE', author: 'S. MCCONNELL', bg: '#243c64', band: '#d87a28', fg: '#f4f6fa', pub: 'MS PRESS', w: 0.048, h: 0.244 },
+        { title: 'DESIGN PATTERNS', author: 'GAMMA ET AL.', bg: '#2b3240', band: '#b59448', fg: '#f2eee4', pub: 'ADDISON-WESLEY', w: 0.036, h: 0.240 },
+        { title: 'CLEAN ARCHITECTURE', author: 'R. C. MARTIN', bg: '#f0eee8', band: '#2b2d34', fg: '#16181e', pub: 'PRENTICE HALL', w: 0.032, h: 0.236 },
+        { title: 'C++ PROGRAMMING LANGUAGE', author: 'B. STROUSTRUP', bg: '#1b263c', band: '#c43e32', fg: '#f6f4ee', pub: 'ADDISON-WESLEY', w: 0.056, h: 0.246 },
+        { title: 'ELEMENTS OF INFORMATION THEORY', author: 'COVER & THOMAS', bg: '#2c483e', band: '#c8a652', fg: '#f4f2e8', pub: 'WILEY', w: 0.044, h: 0.244 },
+        { title: 'PROBABILITY & RANDOM PROC.', author: 'GRIMMETT & STIRZAKER', bg: '#20385e', band: '#e4e6ec', fg: '#f5f6fa', pub: 'OXFORD', w: 0.040, h: 0.242 },
+      ],
+      // Shelf 1 (y=0.54): Springer UTM (White/Yellow) + Springer SUMS (Blue/White) Mathematics Series!
+      [
+        { style: 'utm', title: 'LINEAR ALGEBRA DONE RIGHT', author: 'S. AXLER', bg: '#f5f4ee', w: 0.030, h: 0.244 },
+        { style: 'utm', title: 'UNDERSTANDING ANALYSIS', author: 'S. ABBOTT', bg: '#f5f4ee', w: 0.028, h: 0.244 },
+        { style: 'utm', title: 'MATHEMATICS AND ITS HISTORY', author: 'J. STILLWELL', bg: '#f5f4ee', w: 0.042, h: 0.244 },
+        { style: 'utm', title: 'NAIVE SET THEORY', author: 'P. R. HALMOS', bg: '#f5f4ee', w: 0.024, h: 0.244 },
+        { style: 'utm', title: 'ELEMENTARY ANALYSIS', author: 'K. A. ROSS', bg: '#f5f4ee', w: 0.030, h: 0.244 },
+        { style: 'utm', title: 'TOPOLOGY', author: 'K. JANICH', bg: '#f5f4ee', w: 0.026, h: 0.244 },
+        { style: 'utm', title: 'ANALYTIC NUMBER THEORY', author: 'T. M. APOSTOL', bg: '#f5f4ee', w: 0.034, h: 0.244 },
+        { style: 'utm', title: 'IDEALS, VARIETIES & ALGORITHMS', author: 'COX, LITTLE, O\'SHEA', bg: '#f5f4ee', w: 0.042, h: 0.244 },
+        { style: 'utm', title: 'RATIONAL POINTS ON ELLIPTIC CURVES', author: 'SILVERMAN & TATE', bg: '#f5f4ee', w: 0.030, h: 0.244 },
+        { style: 'utm', title: 'REAL MATHEMATICAL ANALYSIS', author: 'C. C. PUGH', bg: '#f5f4ee', w: 0.036, h: 0.244 },
+        { style: 'utm', title: 'NUMBERS AND GEOMETRY', author: 'J. STILLWELL', bg: '#f5f4ee', w: 0.032, h: 0.244 },
+        { vase: 0xd9cbb8 },
+        { style: 'sums', title: 'ELEMENTARY NUMBER THEORY', author: 'JONES & JONES', bg: '#1b599e', fg: '#f6f8fc', w: 0.030, h: 0.242 },
+        { style: 'sums', title: 'METRIC & TOPOLOGICAL SPACES', author: 'SUTHERLAND', bg: '#1b599e', fg: '#f6f8fc', w: 0.028, h: 0.242 },
+        { style: 'sums', title: 'BASIC LINEAR ALGEBRA', author: 'BLYTH & ROBERTSON', bg: '#1b599e', fg: '#f6f8fc', w: 0.028, h: 0.242 },
+        { style: 'sums', title: 'COMPLEX ANALYSIS', author: 'J. M. HOWIE', bg: '#1b599e', fg: '#f6f8fc', w: 0.030, h: 0.242 },
+        { style: 'sums', title: 'INTRO. TO LIE ALGEBRAS', author: 'ERDMANN & WILDON', bg: '#1b599e', fg: '#f6f8fc', w: 0.030, h: 0.242 },
+        { style: 'sums', title: 'MEASURE, INTEGRAL & PROBABILITY', author: 'CAPINSKI & KOPP', bg: '#1b599e', fg: '#f6f8fc', w: 0.030, h: 0.242 },
+        { style: 'sums', title: 'GROUPS, RINGS AND FIELDS', author: 'D. A. R. WALLACE', bg: '#1b599e', fg: '#f6f8fc', w: 0.030, h: 0.242 },
+        { style: 'sums', title: 'REAL ANALYSIS', author: 'J. M. HOWIE', bg: '#1b599e', fg: '#f6f8fc', w: 0.028, h: 0.242 },
+        { style: 'sums', title: 'ELEMENTARY DIFF. GEOMETRY', author: 'A. PRESSLEY', bg: '#1b599e', fg: '#f6f8fc', w: 0.034, h: 0.242 },
+        { style: 'sums', title: 'VECTOR CALCULUS', author: 'P. C. MATTHEWS', bg: '#1b599e', fg: '#f6f8fc', w: 0.028, h: 0.242 },
+        { style: 'sums', title: 'DISCRETE MATHEMATICS', author: 'N. L. BIGGS', bg: '#1b599e', fg: '#f6f8fc', w: 0.032, h: 0.242 },
+        { style: 'sums', title: 'FIELDS AND GALOIS THEORY', author: 'J. M. HOWIE', bg: '#1b599e', fg: '#f6f8fc', w: 0.028, h: 0.242 },
+      ],
+      // Shelf 2 (center hero shelf, y=0.94): Iconic Yellow Springer GTM (Graduate Texts in Mathematics) Row!
+      [
+        { style: 'gtm', vol: '9', title: 'INTRO. TO LIE ALGEBRAS', author: 'J. E. HUMPHREYS', bg: '#f2c828', w: 0.028, h: 0.246 },
+        { style: 'gtm', vol: '52', title: 'ALGEBRAIC GEOMETRY', author: 'R. HARTSHORNE', bg: '#f2c828', w: 0.040, h: 0.246 },
+        { style: 'gtm', vol: '60', title: 'MATH. METHODS CLASS. MECH.', author: 'V. I. ARNOLD', bg: '#f2c828', w: 0.038, h: 0.246 },
+        { style: 'gtm', vol: '73', title: 'ALGEBRA', author: 'T. W. HUNGERFORD', bg: '#f2c828', w: 0.040, h: 0.246 },
+        { style: 'gtm', vol: '84', title: 'MODERN NUMBER THEORY', author: 'IRELAND & ROSEN', bg: '#f2c828', w: 0.034, h: 0.246 },
+        { style: 'gtm', vol: '96', title: 'FUNCTIONAL ANALYSIS', author: 'J. B. CONWAY', bg: '#f2c828', w: 0.036, h: 0.246 },
+        { style: 'gtm', vol: '103', title: 'COMPLEX ANALYSIS', author: 'SERGE LANG', bg: '#f2c828', w: 0.038, h: 0.246 },
+        { style: 'gtm', vol: '150', title: 'COMMUTATIVE ALGEBRA', author: 'D. EISENBUD', bg: '#f2c828', w: 0.048, h: 0.246 },
+        { style: 'gtm', vol: '173', title: 'GRAPH THEORY', author: 'R. DIESTEL', bg: '#f2c828', w: 0.034, h: 0.246 },
+        { style: 'gtm', vol: '211', title: 'ALGEBRA (REV. 3RD ED.)', author: 'SERGE LANG', bg: '#f2c828', w: 0.052, h: 0.246 },
+        { style: 'gtm', vol: '218', title: 'INTRO. TO SMOOTH MANIFOLDS', author: 'JOHN M. LEE', bg: '#f2c828', w: 0.046, h: 0.246 },
+        { style: 'gtm', vol: '222', title: 'LIE GROUPS & REPRESENTATIONS', author: 'BRIAN C. HALL', bg: '#f2c828', w: 0.038, h: 0.246 },
+        { style: 'gtm', vol: '242', title: 'LINEAR REP. FINITE GROUPS', author: 'J.-P. SERRE', bg: '#f2c828', w: 0.028, h: 0.246 },
+        { style: 'gtm', vol: '267', title: 'QUANTUM THEORY FOR MATH.', author: 'BRIAN C. HALL', bg: '#f2c828', w: 0.040, h: 0.246 },
+        { style: 'gtm', vol: '118', title: 'CATEGORY THEORY', author: 'S. MAC LANE', bg: '#f2c828', w: 0.032, h: 0.246 },
+        { style: 'gtm', vol: '176', title: 'RIEMANNIAN MANIFOLDS', author: 'JOHN M. LEE', bg: '#f2c828', w: 0.032, h: 0.246 },
+        { style: 'gtm', vol: '207', title: 'COURSE IN COMBINATORICS', author: 'J. H. VAN LINT', bg: '#f2c828', w: 0.038, h: 0.246 },
+        { style: 'gtm', vol: '275', title: 'PROBABILITY & STOCHASTICS', author: 'E. CINLAR', bg: '#f2c828', w: 0.040, h: 0.246 },
+        { vase: 0x395853 },
+        { style: 'gtm', vol: '5', title: 'CATEGORIES FOR WORKING MATH.', author: 'S. MAC LANE', bg: '#f2c828', w: 0.032, h: 0.246 },
+        { style: 'gtm', vol: '42', title: 'LINEAR REPRESENTATIONS', author: 'J.-P. SERRE', bg: '#f2c828', w: 0.028, h: 0.246 },
+        { style: 'gtm', vol: '106', title: 'ARITHMETIC ELLIPTIC CURVES', author: 'J. H. SILVERMAN', bg: '#f2c828', w: 0.038, h: 0.246 },
+      ],
+      // Shelf 3 (y=1.34): Computer Architecture & Operating Systems Classics!
+      [
+        { title: 'COMPUTER ARCHITECTURE', author: 'HENNESSY & PATTERSON', bg: '#1b2c4e', band: '#b5342a', fg: '#f6f2e8', vol: '6TH ED', pub: 'MORGAN KAUFMANN', w: 0.056, h: 0.252 },
+        { title: 'COMPUTER ORG. & DESIGN', author: 'PATTERSON & HENNESSY', bg: '#1f4478', band: '#d6a438', fg: '#f6f6fa', vol: 'RISC-V', pub: 'MORGAN KAUFMANN', w: 0.050, h: 0.252 },
+        { title: 'COMPUTER SYSTEMS (CS:APP)', author: 'BRYANT & O\'HALLARON', bg: '#1b365d', band: '#df7224', fg: '#ffffff', vol: '3RD ED', pub: 'PEARSON', w: 0.056, h: 0.256 },
+        { title: 'DIGITAL DESIGN & COMP. ARCH.', author: 'HARRIS & HARRIS', bg: '#263a47', band: '#4da6a6', fg: '#f2f6f8', pub: 'MORGAN KAUFMANN', w: 0.042, h: 0.248 },
+        { title: 'MODERN PROCESSOR DESIGN', author: 'SHEN & LIPASTI', bg: '#5e222a', band: '#d8c49a', fg: '#f8f2e8', pub: 'WAVELAND', w: 0.042, h: 0.246 },
+        { title: 'MASSIVELY PARALLEL PROC.', author: 'HWU, KIRK, EL HAJJ', bg: '#161a18', band: '#76b900', fg: '#f2f8ee', vol: 'CUDA', pub: 'MORGAN KAUFMANN', w: 0.038, h: 0.246 },
+        { title: 'OPERATING SYSTEMS: OSTEP', author: 'ARPACI-DUSSEAU', bg: '#f3f2ec', band: '#d45d28', fg: '#161a24', pub: 'OSTEP', w: 0.046, h: 0.248 },
+        { title: 'MODERN OPERATING SYSTEMS', author: 'A. S. TANENBAUM', bg: '#9e2228', band: '#1a1c22', fg: '#f8f4ee', vol: '4TH ED', pub: 'PEARSON', w: 0.054, h: 0.252 },
+        { title: 'OPERATING SYSTEM CONCEPTS', author: 'SILBERSCHATZ ET AL.', bg: '#1c545e', band: '#d9a438', fg: '#f5f8fa', vol: '10TH', pub: 'WILEY', w: 0.054, h: 0.254 },
+        { title: 'ADV. PROG. UNIX ENVIRONMENT', author: 'W. R. STEVENS', bg: '#1b4736', band: '#d4b254', fg: '#f6f2e6', vol: 'APUE', pub: 'ADDISON-WESLEY', w: 0.054, h: 0.252 },
+        { title: 'LINUX PROGRAMMING INTERFACE', author: 'MICHAEL KERRISK', bg: '#16181c', band: '#e6b828', fg: '#f6f6f2', bandFg: '#14161a', pub: 'NO STARCH', w: 0.064, h: 0.258 },
+        { title: 'LINUX KERNEL DEVELOPMENT', author: 'ROBERT LOVE', bg: '#2c3442', band: '#c43a32', fg: '#f4f6fa', pub: 'ADDISON-WESLEY', w: 0.036, h: 0.242 },
+        { title: 'DESIGN & IMPL. OF FREEBSD', author: 'MCKUSICK ET AL.', bg: '#74202c', band: '#ebe6dc', fg: '#f8f4ee', pub: 'ADDISON-WESLEY', w: 0.046, h: 0.246 },
+        { title: 'COMPUTER ARCHITECTURE', author: 'BLAINE & GORDON', bg: '#303b4a', band: '#9fb4cc', fg: '#f2f5fa', pub: 'MIT PRESS', w: 0.038, h: 0.244 },
+        { title: 'UNDERSTANDING LINUX KERNEL', author: 'BOVET & CESATI', bg: '#f4f2ec', band: '#1d6b6e', fg: '#161a20', pub: "O'REILLY", w: 0.048, h: 0.244 },
+        { title: 'STRUCTURED COMP. ORG.', author: 'A. S. TANENBAUM', bg: '#22385c', band: '#c84a36', fg: '#f4f6fa', pub: 'PEARSON', w: 0.044, h: 0.246 },
+        { title: 'SYNTHESIS OF RISC-V CORES', author: 'PATTERSON & WATERMAN', bg: '#202634', band: '#4a90d9', fg: '#f4f6fa', pub: 'RISC-V', w: 0.034, h: 0.240 },
+        { title: 'MEMORY SYSTEMS: CACHE/DRAM', author: 'JACOB, NG, WANG', bg: '#2e343c', band: '#c88832', fg: '#f4f2ec', pub: 'MORGAN KAUFMANN', w: 0.050, h: 0.250 },
+        { title: 'PARALLEL COMPUTER ARCH.', author: 'CULLER & SINGH', bg: '#362c44', band: '#d0b060', fg: '#f6f2ea', pub: 'MORGAN KAUFMANN', w: 0.052, h: 0.250 },
+      ],
+      // Shelf 4 (top hero shelf, y=1.74): Donald Knuth TAOCP Set + Algorithms & CS Foundations!
+      [
+        { style: 'knuth', vol: 'VOL. 1', title: 'THE ART OF COMPUTER PROG.', author: 'DONALD E. KNUTH', bg: '#16181c', fg: '#dfc068', w: 0.048, h: 0.248 },
+        { style: 'knuth', vol: 'VOL. 2', title: 'SEMINUMERICAL ALGORITHMS', author: 'DONALD E. KNUTH', bg: '#16181c', fg: '#dfc068', w: 0.050, h: 0.248 },
+        { style: 'knuth', vol: 'VOL. 3', title: 'SORTING AND SEARCHING', author: 'DONALD E. KNUTH', bg: '#16181c', fg: '#dfc068', w: 0.052, h: 0.248 },
+        { style: 'knuth', vol: 'VOL. 4A', title: 'COMBINATORIAL ALGORITHMS', author: 'DONALD E. KNUTH', bg: '#16181c', fg: '#dfc068', w: 0.056, h: 0.248 },
+        { style: 'knuth', vol: 'VOL. 4B', title: 'COMBINATORIAL ALG. PT. 2', author: 'DONALD E. KNUTH', bg: '#16181c', fg: '#dfc068', w: 0.048, h: 0.248 },
+        { title: 'CONCRETE MATHEMATICS', author: 'GRAHAM, KNUTH, PATASHNIK', bg: '#223856', band: '#e4d5b4', fg: '#f4f0e4', pub: 'ADDISON-WESLEY', w: 0.042, h: 0.246 },
+        { title: 'INTRODUCTION TO ALGORITHMS', author: 'CORMEN ET AL. (CLRS)', bg: '#f4f2ec', band: '#b82428', fg: '#14161c', vol: '4TH ED', pub: 'MIT PRESS', w: 0.062, h: 0.258 },
+        { title: 'SICP — COMPUTER PROGRAMS', author: 'ABELSON & SUSSMAN', bg: '#3e2d54', band: '#d9b85c', fg: '#f6f2e8', pub: 'MIT PRESS', w: 0.044, h: 0.246 },
+        { title: 'COMPILERS (DRAGON BOOK)', author: 'AHO, LAM, SETHI, ULLMAN', bg: '#6e1e28', band: '#e0b848', fg: '#f8f2e4', pub: 'ADDISON-WESLEY', w: 0.054, h: 0.250 },
+        { title: 'THE C PROG. LANGUAGE', author: 'KERNIGHAN & RITCHIE', bg: '#f4f5f8', band: '#1e5ba8', fg: '#141c2c', vol: 'K&R 2E', pub: 'PRENTICE HALL', w: 0.024, h: 0.236 },
+        { title: 'TYPES & PROG. LANGUAGES', author: 'BENJAMIN C. PIERCE', bg: '#1b4a52', band: '#e6e2d6', fg: '#f4f6f8', pub: 'MIT PRESS', w: 0.040, h: 0.244 },
+        { title: 'THEORY OF COMPUTATION', author: 'MICHAEL SIPSER', bg: '#1c2b48', band: '#d69028', fg: '#f4f6fa', pub: 'CENGAGE', w: 0.036, h: 0.242 },
+        { title: 'ALGORITHM DESIGN MANUAL', author: 'STEVEN S. SKIENA', bg: '#243a62', band: '#e2c242', fg: '#f4f6fa', pub: 'SPRINGER', w: 0.046, h: 0.248 },
+        { title: 'COMPUTATIONAL COMPLEXITY', author: 'ARORA & BARAK', bg: '#2d3a2c', band: '#d8c89c', fg: '#f6f4ec', pub: 'CAMBRIDGE', w: 0.038, h: 0.246 },
+        { title: 'MODERN COMPILER IMPL. IN C', author: 'ANDREW W. APPEL', bg: '#482838', band: '#dcd0b8', fg: '#f6f2ea', pub: 'CAMBRIDGE', w: 0.038, h: 0.244 },
+        { title: 'PURELY FUNCTIONAL DATA STR.', author: 'CHRIS OKASAKI', bg: '#2a4654', band: '#c8b482', fg: '#f4f6f8', pub: 'CAMBRIDGE', w: 0.026, h: 0.236 },
+        { title: 'DEEP LEARNING', author: 'GOODFELLOW, BENGIO, COURVILLE', bg: '#1b2434', band: '#4ea8de', fg: '#f4f8fc', pub: 'MIT PRESS', w: 0.048, h: 0.246 },
+        { title: 'PATTERN REC. & MACHINE LEARN.', author: 'C. M. BISHOP', bg: '#1e4268', band: '#f0c832', fg: '#f6f8fc', pub: 'SPRINGER', w: 0.048, h: 0.248 },
+        { title: 'THE ELEMENTS OF STAT. LEARN.', author: 'HASTIE, TIBSHIRANI', bg: '#263e52', band: '#d49a38', fg: '#f4f6fa', pub: 'SPRINGER', w: 0.048, h: 0.248 },
+        { vase: 0xd9cbb8 },
+      ],
     ];
+
+    const rng = mulberry32(909);
     for (let si = 0; si < 5; si++) {
       const baseY = shelfYs[si] + 0.014;
-      let cursorX = -sw / 2 + 0.08;
-      while (cursorX < sw / 2 - 0.14) {
-        if (rng() < 0.18 && cursorX < sw / 2 - 0.32) {
-          const vase = new THREE.Mesh(
-            new THREE.LatheGeometry(
-              [
-                new THREE.Vector2(0.035, 0),
-                new THREE.Vector2(0.062, 0.08),
-                new THREE.Vector2(0.048, 0.16),
-                new THREE.Vector2(0.028, 0.21),
-                new THREE.Vector2(0.036, 0.23),
-              ],
-              18
-            ),
-            new THREE.MeshStandardMaterial({ color: si % 2 === 0 ? 0xd9cbb8 : 0x395853, roughness: 0.42 })
-          );
-          vase.position.set(cursorX + 0.11, baseY, 0.02);
-          vase.castShadow = true;
-          shelfGroup.add(vase);
-          cursorX += 0.24;
+      const items = shelvesCatalog[si];
+      // Compute total row width and center naturally on each shelf so left/right balance feels authentic
+      const rightLimit = sw / 2 - 0.065;
+      const maxSpan = sw - 0.13;
+      let usedSpan = 0;
+      const fitItems = [];
+      for (const item of items) {
+        const step = item.vase ? 0.16 : ((item.w || 0.036) + 0.003);
+        if (usedSpan + step > maxSpan) break;
+        fitItems.push(item);
+        usedSpan += step;
+      }
+      let cursorX = -usedSpan / 2;
+      for (const item of fitItems) {
+        if (item.vase) {
+          cursorX += addDecorVase(shelfGroup, cursorX, baseY, item.vase);
           continue;
         }
-        const bw = 0.024 + rng() * 0.026;
-        const bh = 0.21 + rng() * 0.11;
-        const bd = 0.19 + rng() * 0.06;
-        const col = bookColors[Math.floor(rng() * bookColors.length)];
-        const book = new THREE.Mesh(
-          new THREE.BoxGeometry(bw, bh, bd),
-          new THREE.MeshStandardMaterial({ color: col, roughness: 0.78 })
-        );
-        book.position.set(cursorX + bw / 2, baseY + bh / 2, (rng() - 0.5) * 0.03);
-        book.rotation.z = (rng() - 0.5) * 0.04;
-        book.castShadow = true;
-        book.receiveShadow = true;
-        shelfGroup.add(book);
-        cursorX += bw + 0.005;
+        cursorX += addBook(shelfGroup, cursorX, baseY, {
+          ...item,
+          zOff: (rng() - 0.5) * 0.014,
+          tilt: (rng() - 0.5) * 0.012,
+        });
       }
     }
 
@@ -2398,6 +2688,113 @@ export class OfficeScene {
       this._addContactShadow(deskGroup, -1.06, sy + 0.0008, -0.58, 0.15, 0.15, 0.84);
       deskGroup.add(mug);
     });
+
+    // Authentic Mathmos Astro Classic Lava Lamp (430 x 140 mm) between 8x DGX Spark stack & Corsair PC!
+    const lavaX = 0.51;
+    const lavaZ = -0.98;
+    this._loadGLB('assets/models/lava_lamp.glb', (lava) => {
+      lava.position.set(lavaX, sy, lavaZ);
+      lava.traverse((obj) => {
+        if (!obj.isMesh || !obj.material) return;
+        const mName = obj.material.name || '';
+        if (obj.material.map) {
+          obj.material.map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        }
+        if (mName === 'LavaLamp_Glass') {
+          obj.material = new THREE.MeshPhysicalMaterial({
+            color: 0xfff8f5,
+            transparent: true,
+            opacity: 0.22,
+            roughness: 0.05,
+            metalness: 0.04,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.04,
+            reflectivity: 0.95,
+            envMapIntensity: 1.75,
+            depthWrite: false,
+          });
+          obj.renderOrder = 6;
+          obj.castShadow = false;
+        } else if (mName === 'LavaLamp_Liquid') {
+          obj.material.transparent = true;
+          obj.material.opacity = 0.58;
+          obj.material.roughness = 0.14;
+          obj.material.emissiveIntensity = 0.62;
+          obj.material.depthWrite = false;
+          obj.material.side = THREE.FrontSide;
+          obj.renderOrder = 4;
+          obj.castShadow = false;
+        } else if (mName.startsWith('LavaLamp_Wax')) {
+          obj.material = obj.material.clone();
+          obj.material.roughness = 0.30;
+          obj.renderOrder = 2;
+          obj.castShadow = false;
+        } else if (mName === 'LavaLamp_SpunAlu') {
+          obj.material.metalness = 0.90;
+          obj.material.roughness = 0.25;
+          obj.material.envMapIntensity = 1.2;
+        } else if (mName === 'LavaLamp_BulbCore') {
+          obj.renderOrder = 1;
+        }
+        if (obj.name.startsWith('LavaBlob_')) {
+          const idx = parseInt(obj.name.split('_')[1], 10) || 0;
+          this.lavaBlobs.push({
+            obj,
+            mat: obj.material,
+            basePos: obj.position.clone(),
+            phase: idx * 1.18 + 0.4,
+            speed: 0.24 + (idx % 3) * 0.07,
+            ampY: idx === 4 ? 0.018 : (idx === 5 ? 0.022 : 0.032),
+            ampXZ: 0.0045,
+          });
+        }
+      });
+      this._addContactShadow(deskGroup, lavaX, sy + 0.0012, lavaZ, 0.175, 0.175, 0.90);
+      deskGroup.add(lava);
+    });
+
+    // Warm molten amber-orange point light & soft localized desk halo radiating from the lava lamp
+    this.lavaLight = new THREE.PointLight(0xff6b26, 0.72, 0.95, 2);
+    this.lavaLight.position.set(lavaX, sy + 0.23, lavaZ);
+    deskGroup.add(this.lavaLight);
+
+    const lavaGlowC = document.createElement('canvas');
+    lavaGlowC.width = lavaGlowC.height = 128;
+    const lgctx = lavaGlowC.getContext('2d');
+    const lgg = lgctx.createRadialGradient(64, 64, 6, 64, 64, 64);
+    lgg.addColorStop(0.0, 'rgba(255, 118, 42, 0.48)');
+    lgg.addColorStop(0.45, 'rgba(255, 84, 34, 0.20)');
+    lgg.addColorStop(1.0, 'rgba(255, 64, 24, 0.0)');
+    lgctx.fillStyle = lgg;
+    lgctx.fillRect(0, 0, 128, 128);
+    const lavaPool = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.44, 0.44),
+      new THREE.MeshBasicMaterial({
+        map: new THREE.CanvasTexture(lavaGlowC),
+        transparent: true,
+        opacity: 0.72,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+        polygonOffsetUnits: -4,
+      })
+    );
+    lavaPool.rotation.x = -Math.PI / 2;
+    lavaPool.position.set(lavaX, sy + 0.0022, lavaZ);
+    lavaPool.renderOrder = 3;
+    deskGroup.add(lavaPool);
+
+    // 7. Lava Lamp AC power cord routing cleanly from rear base grommet into Tripp Lite ISOBAR8ULTRA
+    addAcCord([
+      [lavaX, sy + 0.011, lavaZ - 0.070],
+      [lavaX + 0.01, sy + 0.008, -1.24],
+      [lavaX, sy - 0.004, -1.408],
+      [lavaX - 0.01, 0.675, -1.425],
+      [lavaX - 0.02, 0.340, -1.410],
+      [lavaX - 0.02, 0.130, -1.365],
+      isoPt(0.068, 0.022),
+    ], 0.0032);
 
     this.scene.add(deskGroup);
 
@@ -3159,6 +3556,30 @@ export class OfficeScene {
       }
       for (const fan of this.spinningFans) {
         fan.obj.rotation[fan.axis] += dt * fan.speed;
+      }
+      for (const b of this.lavaBlobs) {
+        const s = Math.sin(elapsed * b.speed + b.phase);
+        const c = Math.cos(elapsed * b.speed * 0.7 + b.phase);
+        const ny = Math.max(0.188, Math.min(0.354, b.basePos.y + s * b.ampY));
+        // Gently tighten radial wander as a blob rises into the narrower upper glass cone
+        const heightFrac = Math.max(0, Math.min(1, (ny - 0.18) / 0.18));
+        const radialScale = 1.0 - heightFrac * 0.36;
+        b.obj.position.set(
+          b.basePos.x * radialScale + c * b.ampXZ,
+          ny,
+          b.basePos.z * radialScale + Math.sin(elapsed * b.speed * 0.55 + b.phase * 1.4) * b.ampXZ
+        );
+        // Volume-preserving organic fluid stretch & squash
+        const stretch = 1.0 + Math.sin(elapsed * b.speed * 1.6 + b.phase) * 0.09;
+        const inv = 1.0 / Math.sqrt(stretch);
+        b.obj.scale.set(inv, stretch, inv);
+        // Hotter molten tangerine glow near the bottom bulb, deeper ruby-orange higher up
+        if (b.mat && b.mat.emissiveIntensity !== undefined) {
+          b.mat.emissiveIntensity = 0.72 + (1.0 - heightFrac) * 0.58;
+        }
+      }
+      if (this.lavaLight) {
+        this.lavaLight.intensity = 0.72 + Math.sin(elapsed * 0.9) * 0.06;
       }
       if (this.pcRgbLight) {
         this.pcRgbLight.color.setHex(0x5ad8fc);
