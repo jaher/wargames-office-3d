@@ -105,6 +105,7 @@ export class SolutionsController {
     this.screenLines = [];
     this.screenVim = null;
     this.screenLastVim = null;
+    this.screenPromptIdle = false;
     this.screenHeader = 'Loading OverTheWire…';
     this.screenGoal = '';
     this.screenHost = 'omarchy@workstation';
@@ -313,6 +314,7 @@ export class SolutionsController {
     this.screenLines = [{ kind: 'note', text: `Loading ${cleanTitle} mission data…` }];
     this.screenVim = null;
     this.screenLastVim = null;
+    this.screenPromptIdle = false;
     this.dom.hudNowPlaying.textContent = titleStr;
     this.dom.termTitle.textContent = `omarchy :: ghostty — ${cleanTitle}`;
     this.dom.statusBadge.textContent = 'Loading…';
@@ -667,9 +669,18 @@ export class SolutionsController {
     const e = this.narrLineTime.get(this._narrKey(step, role, idx));
     if (!e || e.t <= (this.narrAudio.currentTime || 0)) return;
     this.narrFF = false;
+    // If narration pauses before the next command (after previous output finished), show an idle prompt
+    const showWaitingPrompt = (role === 'cmd' || role === 'vimcmd') && this.screenLines.some((l) => l.kind === 'cmd' || l.kind === 'out');
+    if (showWaitingPrompt) {
+      this.screenPromptIdle = true;
+      this._emitScreen();
+    }
     let pausedTicks = 0;
     while (this.narrAudio.paused || (this.narrAudio.currentTime || 0) < e.t) {
-      if (my !== this.runId || !this.narrOn || this.narrAutoplayBlocked || this.narrAudio.error) return;
+      if (my !== this.runId || !this.narrOn || this.narrAutoplayBlocked || this.narrAudio.error) {
+        if (showWaitingPrompt) this.screenPromptIdle = false;
+        return;
+      }
       // If user is playing but audio remains stalled/paused (e.g. blocked or buffering error),
       // release the gate after ~1.5s so the terminal never freezes.
       if (this.playing && this.narrAudio.paused) {
@@ -678,6 +689,7 @@ export class SolutionsController {
           this.narrAutoplayBlocked = true;
           this._setNarrBtnText();
           this._syncAudioButtons();
+          if (showWaitingPrompt) this.screenPromptIdle = false;
           return;
         }
       } else {
@@ -685,6 +697,7 @@ export class SolutionsController {
       }
       await new Promise((r) => setTimeout(r, 60));
     }
+    if (showWaitingPrompt) this.screenPromptIdle = false;
   }
 
   _tagNarr(el, step, role, idx, screenEntry) {
@@ -875,6 +888,7 @@ export class SolutionsController {
       lines: this.screenLines,
       vim: this.screenVim,
       lastVim: this.screenLastVim,
+      promptIdle: this.screenPromptIdle,
       activeNarrSeg: this.activeNarrSeg,
       narrating: this.narrOn && !this.narrAudio.paused && !this.narrAudio.ended,
       narrCaption: activeText,
@@ -935,6 +949,7 @@ export class SolutionsController {
     if (nk) await this._narrGate(nk.step, nk.role, nk.idx, my);
     if (my !== this.runId) return;
 
+    this.screenPromptIdle = false;
     const cleanCmd = this.redactText(cmd);
     const screenEntry = { kind: 'cmd', prompt, text: '', typing: true, segs: null };
     const d = this._appendLine(
@@ -1232,6 +1247,7 @@ export class SolutionsController {
       this.screenLines = [{ kind: 'note', text: `No solved levels recorded for ${cleanTitle} yet.` }];
       this.screenVim = null;
       this.screenLastVim = null;
+      this.screenPromptIdle = true;
       this.dom.hudNowPlaying.textContent = this.screenHeader;
       this.dom.termTitle.textContent = `omarchy :: ghostty — ${cleanTitle}`;
       this.dom.statusBadge.textContent = '0 levels';
@@ -1256,6 +1272,7 @@ export class SolutionsController {
     this.screenLines = [];
     this.screenVim = null;
     this.screenLastVim = null;
+    this.screenPromptIdle = false;
 
     // Pre-populate source file preview ONLY if this level edits a file in vim
     if (L.steps) {
@@ -1439,6 +1456,7 @@ export class SolutionsController {
     if (my !== this.runId) return;
     // Stay pinned on the selected level once its solution finishes so the monitor
     // terminal always matches the level shown in the dropdowns.
+    this.screenPromptIdle = true;
     this.dom.statusBadge.textContent = `Level ${L.lvl} / ${G.levels[G.levels.length - 1].lvl} · Solved`;
     this._emitScreen();
   }

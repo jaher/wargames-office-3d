@@ -27,6 +27,7 @@ export class OmarchyScreen {
       lines: [{ kind: 'note', text: 'Booting Omarchy Linux (Hyprland / Wayland)…' }],
       vim: null,
       lastVim: null,
+      promptIdle: false,
       activeNarrSeg: -1,
       narrating: false,
       narrCaption: '',
@@ -876,7 +877,7 @@ export class OmarchyScreen {
       y += lineH;
     }
 
-    if (!slice.some((r) => r.typing)) {
+    if (this.state.promptIdle && !slice.some((r) => r.typing)) {
       const lastCmd = [...(this.state.lines || [])].reverse().find((l) => l.kind === 'cmd' && l.prompt);
       const promptStr = lastCmd ? lastCmd.prompt : `${(this.state.host || 'omarchy@workstation').split('.')[0]}:~$ `;
       const py = Math.min(y + 4, innerY + innerH - 10);
