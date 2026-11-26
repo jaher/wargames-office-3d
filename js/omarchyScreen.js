@@ -36,6 +36,8 @@ export class OmarchyScreen {
     this._lastDraw = 0;
     this._lastElapsed = 0;
     this._dirty = true;
+    this._nvimScrollTop = 0;
+    this._nvimScrollKey = '';
     this.render(0);
   }
 
@@ -358,7 +360,7 @@ export class OmarchyScreen {
     ctx.roundRect(gap + 2, topY + 2, leftW - 4, hdrH, [8, 8, 0, 0]);
     ctx.fill();
 
-    const hasSplitCode = !!(this.state.lastVim && this.state.lastVim.lines && this.state.lastVim.lines.length > 0);
+    const hasSplitCode = Boolean(this.state.lastVim && this.state.lastVim.file);
     ctx.fillStyle = TN.blue;
     ctx.font = '700 18px "JetBrains Mono", monospace';
     ctx.fillText(
@@ -713,7 +715,14 @@ export class OmarchyScreen {
     // are NEVER truncated with "..." or clipped off the edge.
     const allLines = lastVim.lines || [];
     const activeNum = lastVim.activeLine || 1;
+    const scrollKey = `${this.state.header || ''}::${lastVim.file || ''}`;
+    if (scrollKey !== this._nvimScrollKey || allLines.length === 0) {
+      this._nvimScrollKey = scrollKey;
+      this._nvimScrollTop = 0;
+    }
+
     const visualRows = [];
+    let activeFirstVisualIdx = -1;
     let activeLastVisualIdx = -1;
     for (const ln of allLines) {
       const color = this._colorForCodeLine(ln.text, TN);
@@ -728,15 +737,25 @@ export class OmarchyScreen {
           isCur,
           isCursorRow,
         });
-        if (isCur) activeLastVisualIdx = visualRows.length - 1;
+        if (isCur) {
+          if (activeFirstVisualIdx < 0) activeFirstVisualIdx = visualRows.length - 1;
+          activeLastVisualIdx = visualRows.length - 1;
+        }
       });
     }
 
-    let startIdx = 0;
-    if (lastVim.editing && activeLastVisualIdx >= maxRows - 2) {
-      startIdx = Math.max(0, activeLastVisualIdx - (maxRows - 3));
+    // Sticky Neovim viewport scrolling: only scroll the minimum rows required to keep
+    // the active cursor line in view — never snap back to line 1 between lines or on :wq!
+    if (lastVim.editing && activeFirstVisualIdx >= 0) {
+      if (activeLastVisualIdx >= this._nvimScrollTop + maxRows) {
+        this._nvimScrollTop = activeLastVisualIdx - maxRows + 1;
+      } else if (activeFirstVisualIdx < this._nvimScrollTop) {
+        this._nvimScrollTop = activeFirstVisualIdx;
+      }
     }
-    const visible = visualRows.slice(startIdx, startIdx + maxRows);
+    const maxScroll = Math.max(0, visualRows.length - maxRows);
+    this._nvimScrollTop = Math.max(0, Math.min(this._nvimScrollTop, maxScroll));
+    const visible = visualRows.slice(this._nvimScrollTop, this._nvimScrollTop + maxRows);
 
     let ry = codeY + 18;
     for (const vr of visible) {

@@ -1119,11 +1119,13 @@ export class SolutionsController {
         status: statusTxt,
         mode: modeEl.textContent,
       };
-      // Also preserve full buffer snapshot so the 3D Omarchy monitor keeps showing the complete Neovim source pane after :wq!
-      const allNums = Object.keys(buf).map(Number).sort((a, b) => a - b);
+      // Keep full buffer snapshot (always including active line) so the 3D Neovim split pane stays rock-solid
+      const numSet = new Set(Object.keys(buf).map(Number));
+      if (numSet.size > 0) numSet.add(curLine);
+      const allNums = [...numSet].sort((a, b) => a - b);
       this.screenLastVim = {
         file,
-        lines: allNums.map((num) => ({ num, text: buf[num] })),
+        lines: allNums.map((num) => ({ num, text: num in buf ? buf[num] : '' })),
         activeLine: curLine,
         editing: true,
         mode: modeEl.textContent || 'NORMAL',
@@ -1183,8 +1185,7 @@ export class SolutionsController {
         modeEl.textContent = '-- INSERT --';
         render();
         if (!(await typeChars(a.n, a.text))) return;
-        curLine = a.n + 1; curCol = 1;
-        ensureVisible();
+        curCol = a.text.length + 1;
         render();
         await this._delay(50 * this._speed());
       } else if (a.t === 'edit') {
@@ -1274,26 +1275,19 @@ export class SolutionsController {
     this.screenLastVim = null;
     this.screenPromptIdle = false;
 
-    // Pre-populate source file preview ONLY if this level edits a file in vim
-    if (L.steps) {
-      const firstVimStep = L.steps.find((s) => this._vimFileOf(s));
-      if (firstVimStep) {
-        const vf = this._vimFileOf(firstVimStep);
-        const vimRun = L.steps.filter((s) => this._vimFileOf(s) === vf);
-        const merged = {};
-        for (const s of vimRun) {
-          Object.assign(merged, this._parseVimScreen(s.out));
-        }
-        const nums = Object.keys(merged).map(Number).sort((a, b) => a - b);
-        if (nums.length) {
-          this.screenLastVim = {
-            file: vf,
-            lines: nums.map((num) => ({ num, text: merged[num] })),
-            activeLine: nums[0],
-            editing: false,
-            mode: 'NORMAL',
-          };
-        }
+    // Open the Neovim split pane cleanly on frame 1 when this level starts in vim
+    // (avoid flashing a pre-filled buffer that then wipes to empty when typing begins).
+    if (L.steps && L.steps.length) {
+      const firstNonComment = L.steps.find((s) => !(s.cmd || '').startsWith('#'));
+      const firstVf = firstNonComment ? this._vimFileOf(firstNonComment) : null;
+      if (firstVf) {
+        this.screenLastVim = {
+          file: firstVf,
+          lines: [],
+          activeLine: 1,
+          editing: false,
+          mode: 'NORMAL',
+        };
       }
     }
 
