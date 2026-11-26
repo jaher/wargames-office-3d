@@ -8,6 +8,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { BlueAngelsShow } from './blueAngelsShow.js';
+import { BlueAngelsAudio } from './blueAngelsAudio.js';
 import { versionedUrl } from './assetUrl.js';
 
 // Camera presets matching index.html [data-cam] buttons.
@@ -1098,7 +1099,7 @@ export class OfficeScene {
     this.controls.maxPolarAngle = Math.PI * 0.56;
     this.controls.minPolarAngle = 0.22;
 
-    const p = CAMERA_PRESETS.monitor;
+    const p = CAMERA_PRESETS.overview;
     this.camera.position.set(...p.pos);
     this.controls.target.set(...p.target);
     this.controls.update();
@@ -1488,6 +1489,8 @@ export class OfficeScene {
 
     // U.S. Navy Blue Angels 6-Jet Fleet Week Airshow over San Francisco Bay (outside window, inside cyclorama!)
     this.blueAngels = new BlueAngelsShow(this.scene, this.camera);
+    this.blueAngelsAudio = new BlueAngelsAudio();
+    window.__blueAngelsAudio = this.blueAngelsAudio;
     this._loadGLB('assets/models/blue_angel_f18.glb', (jetModel) => {
       this.blueAngels.attachModel(jetModel);
       this.blueAngels.applySkyMood(SKY_MOODS[this.moodIndex].id);
@@ -2457,12 +2460,14 @@ export class OfficeScene {
     // Iconic cobalt-blue SIGNAL / NOISE poster cleanly visible & 100% unobstructed between right curtain and right viewport edge!
     addFramedArt(2.64, 1.72, -2.56, 0, 0.36, 0.46, 1);
 
-    // Google Nest Learning Thermostat (3rd Gen, Stainless Steel, Ø 84 mm x 31 mm) mounted flush on the right plaster wall pier
-    const nestX = 2.64;
-    const nestY = 1.24;
-    const nestZ = -2.599;
+    // Google Nest Learning Thermostat (3rd Gen, Stainless Steel, Ø 84 mm x 31 mm) mounted flush on the right plaster wall
+    // directly above the architectural wall light switch beside the oiled-walnut entrance door (standard ~1.50 m eye-level height!)
+    const nestX = 3.199;
+    const nestY = 1.50;
+    const nestZ = 0.962;
     this._loadGLB('assets/models/nest_thermostat.glb', (nest) => {
       nest.position.set(nestX, nestY, nestZ);
+      nest.rotation.y = -Math.PI / 2;
       nest.traverse((obj) => {
         if (!obj.isMesh || !obj.material) return;
         const mName = obj.material.name || '';
@@ -2511,7 +2516,8 @@ export class OfficeScene {
         polygonOffsetUnits: -2,
       })
     );
-    nestAo.position.set(nestX, nestY - 0.004, nestZ + 0.002);
+    nestAo.position.set(nestX - 0.002, nestY - 0.004, nestZ);
+    nestAo.rotation.y = -Math.PI / 2;
     nestAo.renderOrder = 2;
     this.scene.add(nestAo);
 
@@ -2733,22 +2739,37 @@ export class OfficeScene {
       deskGroup.add(mouse);
     });
 
-    // Meta Ray-Ban Display Smart Glasses (Shiny Black) & Meta Neural Band (Charcoal Black sEMG Wristband) with tight desk AO!
+    // Meta Ray-Ban Display Smart Glasses (Shiny Black 51-23-150 Wayfarer + right-lens waveguide) & Meta Neural Band
     this._loadGLB('assets/models/meta_rayban_display.glb', (glasses) => {
+      const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
       glasses.position.set(0.06, sy, -0.59);
       glasses.rotation.y = -0.34;
       glasses.traverse((obj) => {
-        if (obj.isMesh && obj.material && obj.material.name === 'MetaRB_Lens') {
+        if (!obj.isMesh || !obj.material) return;
+        if (obj.material.map) {
+          obj.material.map.anisotropy = maxAniso;
+          obj.material.map.needsUpdate = true;
+        }
+        if (obj.material.emissiveMap) {
+          obj.material.emissiveMap.anisotropy = maxAniso;
+          obj.material.emissiveMap.needsUpdate = true;
+        }
+        const mn = obj.material.name || '';
+        if (mn === 'MetaRB_Lens') {
           obj.material.transparent = true;
           obj.material.opacity = 0.56;
           obj.material.depthWrite = false;
-        } else if (obj.isMesh && obj.material && obj.material.name === 'MetaRB_DisplayLens') {
+        } else if (mn === 'MetaRB_DisplayLens') {
           obj.material.transparent = true;
-          obj.material.opacity = 0.58;
-          obj.material.emissiveIntensity = 0.02;
+          obj.material.opacity = 0.68;
+          obj.material.emissiveIntensity = 0.72;
           obj.material.depthWrite = false;
-        } else if (obj.isMesh && obj.material && obj.material.name === 'MetaRB_ShinyBlack') {
-          obj.material.envMapIntensity = 1.6;
+        } else if (mn === 'MetaRB_ShinyBlack') {
+          obj.material.envMapIntensity = 1.75;
+        } else if (mn === 'MetaRB_TempleLogo') {
+          obj.material.polygonOffset = true;
+          obj.material.polygonOffsetFactor = -2;
+          obj.material.polygonOffsetUnits = -2;
         }
       });
       this._addContactShadow(deskGroup, 0.06, sy + 0.0014, -0.59, 0.19, 0.16, 0.92);
@@ -3645,41 +3666,34 @@ export class OfficeScene {
       deskCluster.add(strap);
     }
 
-    // Brushed-black circular aluminum desk cable grommet flush-mounted behind the CRS804 (gives yellow 10GbE uplink a real physical destination!)
-    const gromPos = new THREE.Vector3(swX - 0.160, sy + 0.001, -1.28);
-    const gromRing = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.024, 0.024, 0.003, 24),
-      new THREE.MeshStandardMaterial({ color: 0x20242c, roughness: 0.42, metalness: 0.78 })
-    );
-    gromRing.position.copy(gromPos);
-    deskCluster.add(gromRing);
-    const gromHole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.017, 0.017, 0.0036, 20),
-      new THREE.MeshStandardMaterial({ color: 0x090b0f, roughness: 0.92 })
-    );
-    gromHole.position.copy(gromPos);
-    deskCluster.add(gromHole);
-
-    // Yellow 10GbE Cat6a management uplink cable resting flush on desk -> drops through grommet -> tucks under rear desk beam to wall Ethernet jack!
+    // Continuous Yellow 10GbE Cat6a management uplink cable: exits MikroTik CRS804 ETH1 front port ->
+    // runs cleanly along desk & over the rear desk edge -> drops neatly alongside the power harness ->
+    // glides continuously ON TOP of the rug & hardwood floor straight into the RJ45 wall jack (ZERO splits or floor clipping!)
     const eth1Pos = new THREE.Vector3(swX - 0.012, sy + 0.022, swZ + 0.197);
     const uplinkCurve = new THREE.CatmullRomCurve3([
       eth1Pos,
       new THREE.Vector3(swX - 0.032, sy + 0.011, swZ + 0.226),
-      new THREE.Vector3(swX - 0.146, sy + 0.0042, swZ + 0.224),
-      new THREE.Vector3(swX - 0.160, sy + 0.0036, swZ + 0.16),
-      new THREE.Vector3(swX - 0.160, sy + 0.0036, swZ - 0.08),
-      new THREE.Vector3(swX - 0.160, sy + 0.0048, -1.255),
-      new THREE.Vector3(swX - 0.160, sy - 0.055, -1.280),
-      new THREE.Vector3(swX - 0.160, 0.680, -1.430),
-      new THREE.Vector3(0.35, 0.665, -1.435),
-      new THREE.Vector3(0.36, 0.26, -1.440),
-      new THREE.Vector3(0.36, 0.022, -1.520),
-      new THREE.Vector3(0.36, 0.022, -2.545),
-      new THREE.Vector3(0.36, 0.175, -2.578),
+      new THREE.Vector3(swX - 0.146, sy + 0.0045, swZ + 0.224),
+      new THREE.Vector3(swX - 0.160, sy + 0.0040, swZ + 0.14),
+      new THREE.Vector3(swX - 0.160, sy + 0.0040, swZ - 0.10),
+      new THREE.Vector3(swX - 0.155, sy + 0.0040, -1.355),
+      new THREE.Vector3(swX - 0.145, sy + 0.0025, -1.412),
+      new THREE.Vector3(swX - 0.120, 0.710, -1.428),
+      new THREE.Vector3(0.14, 0.675, -1.434),
+      new THREE.Vector3(0.355, 0.655, -1.436),
+      new THREE.Vector3(0.360, 0.360, -1.440),
+      new THREE.Vector3(0.360, 0.095, -1.458),
+      new THREE.Vector3(0.360, 0.024, -1.520),
+      new THREE.Vector3(0.360, 0.016, -1.680),
+      new THREE.Vector3(0.360, 0.014, -2.020),
+      new THREE.Vector3(0.360, 0.014, -2.360),
+      new THREE.Vector3(0.360, 0.022, -2.535),
+      new THREE.Vector3(0.360, 0.095, -2.568),
+      new THREE.Vector3(0.360, 0.175, -2.582),
     ], false, 'centripetal', 0.5);
     const uplinkMesh = new THREE.Mesh(
-      new THREE.TubeGeometry(uplinkCurve, 96, 0.0029, 12, false),
-      new THREE.MeshStandardMaterial({ color: 0xdca432, roughness: 0.34, metalness: 0.06 })
+      new THREE.TubeGeometry(uplinkCurve, 148, 0.0032, 12, false),
+      new THREE.MeshStandardMaterial({ color: 0xe6ad2e, roughness: 0.34, metalness: 0.06 })
     );
     uplinkMesh.castShadow = true;
     deskCluster.add(uplinkMesh);
@@ -3692,7 +3706,7 @@ export class OfficeScene {
     deskCluster.add(ethWallPlate);
     const ethWallPlug = new THREE.Mesh(
       new RoundedBoxGeometry(0.014, 0.014, 0.020, 2, 0.002),
-      new THREE.MeshStandardMaterial({ color: 0xdca432, roughness: 0.38 })
+      new THREE.MeshStandardMaterial({ color: 0xe6ad2e, roughness: 0.38 })
     );
     ethWallPlug.position.set(0.36, 0.175, -2.582);
     deskCluster.add(ethWallPlug);
@@ -3892,6 +3906,10 @@ export class OfficeScene {
     return this.applySkyMood(this.moodIndex + 1);
   }
 
+  toggleJetAudio() {
+    return this.blueAngelsAudio ? this.blueAngelsAudio.toggle() : false;
+  }
+
   goToPreset(name) {
     const preset = CAMERA_PRESETS[name];
     if (!preset) return;
@@ -4039,6 +4057,9 @@ export class OfficeScene {
 
       if (this.blueAngels) {
         this.blueAngels.update(dt);
+        if (this.blueAngelsAudio) {
+          this.blueAngelsAudio.update(this.blueAngels.getAudioMetrics(), dt);
+        }
       }
 
       this.renderFrame();

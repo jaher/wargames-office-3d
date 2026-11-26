@@ -4,22 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta name="asset-version" content="e0e5bb860a">
+  <meta name="asset-version" content="5c45623881">
   <title>Wargames Office 3D — OverTheWire Solutions</title>
   <meta name="description" content="Interactive 3D office with an Omarchy Linux workstation, Corsair RTX 5090 rig, 8x DGX Spark cluster, and live narrated OverTheWire wargame solutions.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231a1b26'/><path d='M16 6L26 26H21L16 15L11 26H6Z' fill='%237aa2f7'/></svg>">
-  <script>window.__ASSET_VERSION__ = 'e0e5bb860a';</script>
+  <script>window.__ASSET_VERSION__ = '5c45623881';</script>
   <script type="importmap">
     {
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-        "./js/assetUrl.js": "./js/assetUrl.js?v=e0e5bb860a",
-        "./js/blueAngelsShow.js": "./js/blueAngelsShow.js?v=e0e5bb860a",
-        "./js/main.js": "./js/main.js?v=e0e5bb860a",
-        "./js/officeScene.js": "./js/officeScene.js?v=e0e5bb860a",
-        "./js/omarchyScreen.js": "./js/omarchyScreen.js?v=e0e5bb860a",
-        "./js/solutions.js": "./js/solutions.js?v=e0e5bb860a"
+        "./js/assetUrl.js": "./js/assetUrl.js?v=5c45623881",
+        "./js/blueAngelsAudio.js": "./js/blueAngelsAudio.js?v=5c45623881",
+        "./js/blueAngelsShow.js": "./js/blueAngelsShow.js?v=5c45623881",
+        "./js/main.js": "./js/main.js?v=5c45623881",
+        "./js/officeScene.js": "./js/officeScene.js?v=5c45623881",
+        "./js/omarchyScreen.js": "./js/omarchyScreen.js?v=5c45623881",
+        "./js/solutions.js": "./js/solutions.js?v=5c45623881"
       }
     }
   </script>
@@ -30,14 +31,15 @@
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/lights/RectAreaLightUniformsLib.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/lights/RectAreaLightTexturesLib.js">
-  <link rel="modulepreload" href="js/assetUrl.js?v=e0e5bb860a">
-  <link rel="modulepreload" href="js/blueAngelsShow.js?v=e0e5bb860a">
-  <link rel="modulepreload" href="js/main.js?v=e0e5bb860a">
-  <link rel="modulepreload" href="js/officeScene.js?v=e0e5bb860a">
-  <link rel="modulepreload" href="js/omarchyScreen.js?v=e0e5bb860a">
-  <link rel="modulepreload" href="js/solutions.js?v=e0e5bb860a">
-  <link rel="preload" as="image" href="assets/textures/skyline_golden.jpg?v=e0e5bb860a">
-  <link rel="stylesheet" href="css/style.css?v=e0e5bb860a">
+  <link rel="modulepreload" href="js/assetUrl.js?v=5c45623881">
+  <link rel="modulepreload" href="js/blueAngelsAudio.js?v=5c45623881">
+  <link rel="modulepreload" href="js/blueAngelsShow.js?v=5c45623881">
+  <link rel="modulepreload" href="js/main.js?v=5c45623881">
+  <link rel="modulepreload" href="js/officeScene.js?v=5c45623881">
+  <link rel="modulepreload" href="js/omarchyScreen.js?v=5c45623881">
+  <link rel="modulepreload" href="js/solutions.js?v=5c45623881">
+  <link rel="preload" as="image" href="assets/textures/skyline_golden.jpg?v=5c45623881">
+  <link rel="stylesheet" href="css/style.css?v=5c45623881">
 </head>
 <body>
   <div id="app" class="app">
@@ -65,14 +67,15 @@
         </div>
 
         <div class="hud-actions">
+          <button id="jetAudioBtn" class="hud-btn" title="Toggle Blue Angels jet engine sound">✈ Jet Audio</button>
           <button id="skyMoodBtn" class="hud-btn" title="Switch window sky lighting">☀ Golden Hour</button>
           <button id="togglePanelBtn" class="hud-btn hud-btn-accent" title="Toggle solutions &amp; narration panel (P)">Hide Panel</button>
         </div>
       </header>
 
       <nav class="camera-bar" aria-label="Camera Presets">
-        <button class="cam-btn" data-cam="overview" title="Shortcut: 1">1 · Office</button>
-        <button class="cam-btn active" data-cam="monitor" title="Shortcut: 2">2 · Omarchy Monitor</button>
+        <button class="cam-btn active" data-cam="overview" title="Shortcut: 1">1 · Office</button>
+        <button class="cam-btn" data-cam="monitor" title="Shortcut: 2">2 · Omarchy Monitor</button>
         <button class="cam-btn" data-cam="pc" title="Shortcut: 3">3 · Corsair RTX 5090</button>
         <button class="cam-btn" data-cam="cluster" title="Shortcut: 4">4 · 6× DGX Spark + 2× GX10 + CRS804</button>
         <button class="cam-btn" data-cam="window" title="Shortcut: 5">5 · Skyline View</button>
@@ -200,6 +203,6 @@
       }, 10000);
     })();
   </script>
-  <script type="module" src="js/main.js?v=e0e5bb860a"></script>
+  <script type="module" src="js/main.js?v=5c45623881"></script>
 </body>
 </html>

@@ -12,6 +12,7 @@ function getDom() {
     loadingBarFill: byId('loadingBarFill'),
     loadingCount: byId('loadingCount'),
     hudNowPlaying: byId('hudNowPlaying'),
+    jetAudioBtn: byId('jetAudioBtn'),
     skyMoodBtn: byId('skyMoodBtn'),
     togglePanelBtn: byId('togglePanelBtn'),
     closePanelBtn: byId('closePanelBtn'),
@@ -130,6 +131,15 @@ function bootstrap() {
     office.goToPreset('monitor');
     setActiveCamButton(dom.camButtons, 'monitor');
   });
+
+  // Blue Angels live jet engine audio toggle
+  if (dom.jetAudioBtn) {
+    dom.jetAudioBtn.addEventListener('click', () => {
+      if (!office) return;
+      const on = office.toggleJetAudio();
+      dom.jetAudioBtn.textContent = on ? '✈ Jet Audio' : '✈ Muted';
+    });
+  }
 
   // Sky mood switcher (Golden Hour / Clear Day / Sunset Dusk)
   dom.skyMoodBtn.addEventListener('click', () => {

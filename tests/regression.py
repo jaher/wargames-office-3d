@@ -195,7 +195,7 @@ def test_static_integrity():
     assert mod_idx < 0 or im_idx < mod_idx, "importmap MUST precede all module scripts!"
 
     refs = set()
-    for rel in ["index.html", "js/main.js", "js/officeScene.js", "js/omarchyScreen.js", "js/solutions.js", "js/blueAngelsShow.js", "js/assetUrl.js", "css/style.css"]:
+    for rel in ["index.html", "js/main.js", "js/officeScene.js", "js/omarchyScreen.js", "js/solutions.js", "js/blueAngelsShow.js", "js/blueAngelsAudio.js", "js/assetUrl.js", "css/style.css"]:
         txt = open(os.path.join(ROOT, rel)).read()
         for m in re.findall(r"""['"]((?:assets|js|css|overthewire-solutions)/[^'"]+)['"]""", txt):
             if "${" not in m:
@@ -245,6 +245,50 @@ def test_live_scene_window_and_assets(port):
         assert len(stats["failed"]) == 0, f"Failed 3D assets: {stats['failed']}"
         assert len(stats["loaded"]) >= 26, f"Too few assets loaded: {len(stats['loaded'])}"
         assert cdp.eval("Boolean(window.__blueAngelsActive)"), "Blue Angels airshow did not initialize"
+        # Exhaustively verify 100% smooth, continuous Blue Angels trajectories across the full closed cycle
+        # (ZERO teleports, jumps, orientation flips, or window/cyclorama clipping!) + live Web Audio engine
+        ba_check = cdp.eval("""(() => {
+            const ba = window.__blueAngelsShow;
+            const aud = window.__blueAngelsAudio;
+            if (!ba || !aud) return { ok: false, reason: 'missing' };
+            const posA = ba.jets[0].pos.clone(), posB = ba.jets[0].pos.clone();
+            const qA = ba.jets[0].mesh.quaternion.clone(), qB = ba.jets[0].mesh.quaternion.clone();
+            const fwd = ba.jets[0].vel.clone();
+            let maxStep = 0, maxAng = 0, maxZ = -999, maxCylR = 0;
+            const dt = 0.05;
+            for (let j = 0; j < 6; j++) {
+                ba.evaluateJetPose(j, 0, posA, qA, fwd);
+                for (let s = 1; s <= 1200; s++) {
+                    ba.evaluateJetPose(j, s * dt, posB, qB, fwd);
+                    const d = posA.distanceTo(posB);
+                    if (d > maxStep) maxStep = d;
+                    const dot = Math.min(1, Math.abs(qA.dot(qB)));
+                    const ang = 2 * Math.acos(dot);
+                    if (ang > maxAng) maxAng = ang;
+                    if (posB.z > maxZ) maxZ = posB.z;
+                    const cr = Math.hypot(posB.x + 0.15, posB.z + 1.8);
+                    if (cr > maxCylR) maxCylR = cr;
+                    posA.copy(posB);
+                    qA.copy(qB);
+                }
+            }
+            const m = ba.getAudioMetrics();
+            return {
+                ok: true,
+                maxStep: +maxStep.toFixed(4),
+                maxAng: +maxAng.toFixed(4),
+                maxZ: +maxZ.toFixed(2),
+                maxCylR: +maxCylR.toFixed(2),
+                audioEnabled: aud.enabled,
+                metricsOk: Number.isFinite(m.intensity) && Number.isFinite(m.doppler) && Number.isFinite(m.pan),
+                hasBtn: Boolean(document.getElementById('jetAudioBtn')),
+            };
+        })()""")
+        assert ba_check["ok"], f"Blue Angels check failed: {ba_check}"
+        assert ba_check["maxStep"] < 0.85, f"Blue Angels teleport/jump detected: {ba_check}"
+        assert ba_check["maxAng"] < 0.45, f"Blue Angels orientation snap/flip detected: {ba_check}"
+        assert ba_check["maxZ"] < -10.0 and ba_check["maxCylR"] < 31.0, f"Blue Angels out of exterior airspace: {ba_check}"
+        assert ba_check["audioEnabled"] and ba_check["metricsOk"] and ba_check["hasBtn"], f"Blue Angels audio invalid: {ba_check}"
         # Verify both RTX 3090 FE fans (front & back) are registered and actively spinning in live scene
         fans_before = cdp.eval("Object.fromEntries((window.__rtx3090Fans || []).map(f => [f.name, f.rotation.z]))")
         assert "RTX3090_FanFront" in fans_before and "RTX3090_FanBack" in fans_before, f"Missing RTX 3090 fans: {fans_before}"
@@ -256,7 +300,7 @@ def test_live_scene_window_and_assets(port):
         assert preamble["jumpCount"] > 0 and preamble["transcriptCount"] > 0, f"Revealed before solutions/narration ready: {preamble}"
 
         active_cam = cdp.eval("document.querySelector('.cam-btn.active')?.dataset?.cam")
-        assert active_cam == "monitor", f"Default camera should be 'monitor', got {active_cam!r}"
+        assert active_cam == "overview", f"Default camera should be 'overview', got {active_cam!r}"
 
         # Switch to Skyline View (preset 5) and verify Golden Hour, Twilight, Morning all render rich textured views
         cdp.eval("document.querySelector('.cam-btn[data-cam=\"window\"]').click()")

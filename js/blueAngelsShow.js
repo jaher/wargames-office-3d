@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 
-const CYCLE_DURATION = 48.0; // 4 seamless 12-second Blue Angels airshow acts
-const ACT_DURATION = 12.0;
-const TRAIL_POINTS = 96;
-const TRAIL_SAMPLE_DT = 0.045;
-const TRAIL_MAX_AGE = 4.2;
+// 100% Continuous Closed-Loop Periodic Airshow Circuits (ZERO teleports, jumps, or jerky resets!)
+const DIAMOND_PERIOD = 44.0;
+const SOLO_PERIOD = 30.0;
+const LUT_STEPS = 256;
+const TRAIL_POINTS = 104;
+const TRAIL_SAMPLE_DT = 0.042;
+const TRAIL_MAX_AGE = 4.3;
 
 // Tight Blue Angels Diamond formation offsets expressed in Boss (#1) local frame:
-// (right, up, forward) where forward = +Z, up = +Y, right = +X.
+// (right = +X, up = +Y, forward = +Z).
 const DIAMOND_OFFSETS = [
   new THREE.Vector3(0.0, 0.0, 0.0),      // #1 Boss (Lead)
   new THREE.Vector3(0.95, -0.10, -1.02), // #2 Right Wing
@@ -15,14 +17,14 @@ const DIAMOND_OFFSETS = [
   new THREE.Vector3(0.0, -0.22, -2.04),  // #4 Slot
 ];
 
-const DELTA_EXTRA_OFFSETS = [
-  new THREE.Vector3(1.90, -0.18, -2.04),  // #5 Outer Right Delta
-  new THREE.Vector3(-1.90, -0.18, -2.04), // #6 Outer Left Delta
-];
-
 function smoothstep(edge0, edge1, x) {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
+}
+
+// Smooth periodic bump in [0, 1] returning 0 outside [a, d], peaking smoothly at 1 on [b, c]
+function smoothBump(u, a, b, c, d) {
+  return smoothstep(a, b, u) * (1.0 - smoothstep(c, d, u));
 }
 
 function createSmokeRibbonTexture() {
@@ -32,7 +34,6 @@ function createSmokeRibbonTexture() {
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, 128, 128);
 
-  // Soft billowy cross-section profile (thick core across V=0.5, wispy feathered edges at V=0 & V=1)
   const g = ctx.createLinearGradient(0, 0, 0, 128);
   g.addColorStop(0.0, 'rgba(255,255,255,0.0)');
   g.addColorStop(0.18, 'rgba(255,255,255,0.28)');
@@ -44,7 +45,6 @@ function createSmokeRibbonTexture() {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 128, 128);
 
-  // Subtle organic paraffin-smoke turbulence puffs along length U
   for (let i = 0; i < 28; i++) {
     const px = ((i * 47) % 128);
     const py = 46 + ((i * 29) % 36);
@@ -114,12 +114,8 @@ class SmokeTrailRibbon {
     this.mat.opacity = opacity;
   }
 
-  pushSample(pos, age, breakRibbon = false) {
-    this.samples.unshift({
-      pos: pos.clone(),
-      age,
-      broken: breakRibbon,
-    });
+  pushSample(pos, age) {
+    this.samples.unshift({ pos: pos.clone(), age });
     if (this.samples.length > this.maxPoints) {
       this.samples.length = this.maxPoints;
     }
@@ -128,9 +124,9 @@ class SmokeTrailRibbon {
   advanceAges(dt) {
     for (let i = 0; i < this.samples.length; i++) {
       this.samples[i].age += dt;
-      // Gentle atmospheric sea-breeze drift & subtle buoyancy
-      this.samples[i].pos.x += dt * 0.14;
-      this.samples[i].pos.y += dt * 0.04;
+      // Gentle San Francisco Bay sea-breeze drift & buoyancy
+      this.samples[i].pos.x += dt * 0.11;
+      this.samples[i].pos.y += dt * 0.03;
     }
     while (this.samples.length > 0 && this.samples[this.samples.length - 1].age > TRAIL_MAX_AGE) {
       this.samples.pop();
@@ -165,8 +161,6 @@ class SmokeTrailRibbon {
       const prev = this.samples[Math.max(0, idx - 1)];
       const next = this.samples[Math.min(n - 1, idx + 1)];
 
-      const jumpBreak = s.broken || prev.broken || s.pos.distanceToSquared(next.pos) > 3.5;
-
       this._tmpDir.subVectors(prev.pos, next.pos);
       if (this._tmpDir.lengthSq() < 1e-6) {
         this._tmpDir.set(1, 0, 0);
@@ -183,12 +177,10 @@ class SmokeTrailRibbon {
       }
 
       const ageNorm = Math.min(1.0, s.age / TRAIL_MAX_AGE);
-      // Billow outward from crisp exhaust nozzle width to soft dissipating plume
-      const halfW = jumpBreak ? 0.0 : (0.042 + Math.pow(ageNorm, 0.72) * 0.22);
-      // Fade in slightly right behind exhaust and dissipate gracefully toward tail
-      const headFade = smoothstep(0.0, 0.035, ageNorm);
+      const halfW = 0.042 + Math.pow(ageNorm, 0.72) * 0.22;
+      const headFade = smoothstep(0.0, 0.032, ageNorm);
       const tailFade = Math.pow(Math.max(0, 1.0 - ageNorm), 1.35);
-      const alpha = jumpBreak ? 0.0 : headFade * tailFade;
+      const alpha = headFade * tailFade;
 
       posAttr.setXYZ(
         i * 2,
@@ -217,6 +209,145 @@ class SmokeTrailRibbon {
   }
 }
 
+/**
+ * Closed, arc-length-parameterized 3D airshow circuit with a precomputed,
+ * twist-free, singularity-free aerodynamic banked quaternion LUT.
+ * Guarantees C1/C2 continuity around the entire closed loop (ZERO teleports or flips!).
+ */
+class ClosedFlightTrack {
+  constructor(waypoints, period, rollFn = null, bankScale = 3.2) {
+    this.curve = new THREE.CatmullRomCurve3(waypoints, true, 'centripetal');
+    this.period = period;
+    this.rollFn = rollFn;
+    this.totalLength = this.curve.getLength();
+    this.speed = this.totalLength / this.period;
+
+    this.positions = new Array(LUT_STEPS + 1);
+    this.tangents = new Array(LUT_STEPS + 1);
+    this.quats = new Array(LUT_STEPS + 1);
+    this.gLoad = new Array(LUT_STEPS + 1);
+
+    this._buildContinuousFrames(bankScale);
+  }
+
+  _buildContinuousFrames(bankScale) {
+    const N = LUT_STEPS;
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const eps = 1.0 / N;
+
+    // 1. Sample exact arc-length positions & tangents
+    for (let i = 0; i <= N; i++) {
+      const u = (i % N) / N;
+      this.positions[i] = this.curve.getPointAt(u);
+      this.tangents[i] = this.curve.getTangentAt(u).normalize();
+    }
+
+    // 2. Parallel-transport a singularity-free reference Up vector around the closed loop,
+    //    gently blending toward aerodynamic lift (worldUp + centripetal acceleration) so jets
+    //    naturally bank into every turn and smoothly invert over the apex of vertical loops!
+    const ups = new Array(N + 1);
+    const fwd0 = this.tangents[0];
+    const initRight = new THREE.Vector3().crossVectors(worldUp, fwd0).normalize();
+    ups[0] = new THREE.Vector3().crossVectors(fwd0, initRight).normalize();
+
+    const acc = new THREE.Vector3();
+    const desiredUp = new THREE.Vector3();
+    const rotAxis = new THREE.Vector3();
+    const stepQ = new THREE.Quaternion();
+
+    for (let i = 0; i < N; i++) {
+      const fPrev = this.tangents[i];
+      const fNext = this.tangents[i + 1];
+      const fPrev2 = this.tangents[(i - 1 + N) % N];
+
+      // Centripetal curvature acceleration vector (dT/du)
+      acc.subVectors(fNext, fPrev2).multiplyScalar(0.5 / eps);
+      this.gLoad[i] = Math.min(1.0, acc.length() / 12.0);
+
+      // Parallel-transport previous Up to next tangent
+      const uTransport = ups[i].clone();
+      rotAxis.crossVectors(fPrev, fNext);
+      if (rotAxis.lengthSq() > 1e-10) {
+        rotAxis.normalize();
+        const angle = Math.acos(Math.max(-1, Math.min(1, fPrev.dot(fNext))));
+        stepQ.setFromAxisAngle(rotAxis, angle);
+        uTransport.applyQuaternion(stepQ);
+      }
+      uTransport.addScaledVector(fNext, -uTransport.dot(fNext)).normalize();
+
+      // Aerodynamic lift target: gravity up + inward turn/loop centripetal force
+      desiredUp.copy(worldUp).addScaledVector(acc, bankScale * 0.085);
+      desiredUp.addScaledVector(fNext, -desiredUp.dot(fNext));
+      if (desiredUp.lengthSq() > 0.04) {
+        desiredUp.normalize();
+        // Only pull toward desiredUp when aligned within 110° so vertical loops stay 100% smooth & inverted at apex!
+        if (desiredUp.dot(uTransport) > -0.35) {
+          uTransport.lerp(desiredUp, 0.16).normalize();
+        }
+      }
+      ups[i + 1] = uTransport;
+    }
+    this.gLoad[N] = this.gLoad[0];
+
+    // 3. Measure any tiny residual holonomy twist between ups[N] and ups[0] in the exact right-hand basis
+    //    around +fEnd (so rotating ups[N] by -residualTwist around +fEnd aligns it to ups[0] with < 1e-6 error!).
+    const fEnd = this.tangents[0];
+    const perp0 = new THREE.Vector3().crossVectors(fEnd, ups[0]).normalize();
+    const cosT = Math.max(-1, Math.min(1, ups[N].dot(ups[0])));
+    const sinT = ups[N].dot(perp0);
+    const residualTwist = Math.atan2(sinT, cosT);
+
+    const basis = new THREE.Matrix4();
+    const right = new THREE.Vector3();
+    const up = new THREE.Vector3();
+    const twistQ = new THREE.Quaternion();
+
+    for (let i = 0; i <= N; i++) {
+      const frac = i / N;
+      const fwd = this.tangents[i];
+      up.copy(ups[i]);
+      const extraRoll = -residualTwist * frac + (this.rollFn ? this.rollFn(frac) : 0.0);
+      if (Math.abs(extraRoll) > 1e-6) {
+        twistQ.setFromAxisAngle(fwd, extraRoll);
+        up.applyQuaternion(twistQ);
+      }
+      up.addScaledVector(fwd, -up.dot(fwd)).normalize();
+      right.crossVectors(up, fwd).normalize();
+      up.crossVectors(fwd, right).normalize();
+      basis.makeBasis(right, up, fwd);
+      this.quats[i] = new THREE.Quaternion().setFromRotationMatrix(basis);
+      // Enforce same quaternion hemisphere as previous sample so slerp always takes the shortest arc
+      if (i > 0 && this.quats[i].dot(this.quats[i - 1]) < 0) {
+        const q = this.quats[i];
+        q.set(-q.x, -q.y, -q.z, -q.w);
+      }
+    }
+    this.quats[N].copy(this.quats[0]);
+    if (this.quats[N].dot(this.quats[N - 1]) < 0) {
+      const q = this.quats[N];
+      q.set(-q.x, -q.y, -q.z, -q.w);
+    }
+  }
+
+  sample(t, outPos, outQuat, outFwd) {
+    const u = (((t / this.period) % 1) + 1) % 1;
+    const fIdx = u * LUT_STEPS;
+    const i0 = Math.floor(fIdx) % LUT_STEPS;
+    const i1 = i0 + 1;
+    const alpha = fIdx - Math.floor(fIdx);
+
+    outPos.lerpVectors(this.positions[i0], this.positions[i1], alpha);
+    outFwd.lerpVectors(this.tangents[i0], this.tangents[i1], alpha).normalize();
+    outQuat.slerpQuaternions(this.quats[i0], this.quats[i1], alpha);
+
+    return {
+      u,
+      gLoad: this.gLoad[i0] * (1 - alpha) + this.gLoad[i1] * alpha,
+      speed: this.speed,
+    };
+  }
+}
+
 export class BlueAngelsShow {
   constructor(scene, camera) {
     this.scene = scene;
@@ -230,35 +361,119 @@ export class BlueAngelsShow {
     this.jetMaterials = [];
     this.ready = false;
 
-    // Start mid-maneuver (Act 0 Diamond vertical loop + opposing solo cross) so the show is alive on frame 1!
-    this.phaseOffset = 4.65;
+    // Start right as the 4-ship Diamond pulls up into the Bay Bridge vertical loop while both Solos converge!
+    this.phaseOffset = 7.4;
     this.showTime = this.phaseOffset;
     this._sampleAccum = 0;
 
     this.smokeTex = createSmokeRibbonTexture();
+    this._buildClosedTracks();
 
-    // Reusable scratch vectors/matrices (zero per-frame GC churn)
-    this._p0 = new THREE.Vector3();
-    this._p1 = new THREE.Vector3();
-    this._fwd = new THREE.Vector3();
-    this._right = new THREE.Vector3();
-    this._up = new THREE.Vector3();
-    this._basis = new THREE.Matrix4();
-    this._q = new THREE.Quaternion();
-    this._rollQ = new THREE.Quaternion();
+    // Reusable scratch vectors (zero per-frame allocations)
+    this._bossPos = new THREE.Vector3();
+    this._bossQuat = new THREE.Quaternion();
+    this._bossFwd = new THREE.Vector3();
+    this._bossRight = new THREE.Vector3();
+    this._bossUp = new THREE.Vector3();
+    this._jetPos = new THREE.Vector3();
+    this._jetQuat = new THREE.Quaternion();
+    this._jetFwd = new THREE.Vector3();
+    this._jetVel = new THREE.Vector3();
     this._exhaust = new THREE.Vector3();
-    this._worldPos = new THREE.Vector3();
-    this._bossFrame = {
-      pos: new THREE.Vector3(),
-      right: new THREE.Vector3(),
-      up: new THREE.Vector3(),
-      fwd: new THREE.Vector3(),
-      smoke: true,
+    this._toCam = new THREE.Vector3();
+    this._rollQ = new THREE.Quaternion();
+    this._audioMetrics = {
+      intensity: 0.25,
+      pan: 0,
+      doppler: 1.0,
+      brightness: 0.3,
+      afterburner: 0.2,
+      windowProximity: 0.65,
     };
   }
 
+  _buildClosedTracks() {
+    // 1. 4-Ship Diamond Continuous Closed San Francisco Bay Circuit (44 s):
+    //    Left-to-right entry -> Giant 360° Vertical Loop over Bay Bridge -> Exit Aileron Roll ->
+    //    High right skyline turn -> Upper sky Right-to-Left sweeping Barrel Roll & Fleur-de-Lis spread ->
+    //    Smooth left skyline bank back into the Bay Bridge loop!
+    const diamondPts = [
+      new THREE.Vector3(-14.2, 3.65, -22.6), // Smooth entry from far-left bay
+      new THREE.Vector3(-7.6, 3.05, -20.2),  // Low approach over left bay
+      new THREE.Vector3(-1.4, 3.00, -19.6),  // Pull-up base over Bay Bridge!
+      new THREE.Vector3(1.85, 4.45, -19.3),  // Vertical climb right side of loop (tilted nicely!)
+      new THREE.Vector3(1.60, 6.75, -19.8),  // High climb toward apex
+      new THREE.Vector3(-0.35, 7.55, -20.5), // Inverted apex high above Bay Bridge!
+      new THREE.Vector3(-2.45, 6.25, -21.1), // Descending left arc of loop
+      new THREE.Vector3(-1.95, 3.70, -20.9), // Pull-out dive
+      new THREE.Vector3(0.90, 3.05, -20.1),  // Level pull-out accelerating right
+      new THREE.Vector3(7.40, 3.55, -19.6),  // Fast exit right (360° formation roll!)
+      new THREE.Vector3(13.6, 4.85, -21.2),  // Climbing right bank
+      new THREE.Vector3(15.6, 6.15, -23.6),  // Far-right skyline turnaround
+      new THREE.Vector3(10.8, 6.45, -23.8),  // High return entry
+      new THREE.Vector3(4.20, 5.55, -20.6),  // Sweeping upper bay right-to-left
+      new THREE.Vector3(-2.20, 5.15, -19.5), // Center-window high barrel roll!
+      new THREE.Vector3(-8.80, 5.85, -20.4), // Left upper climb
+      new THREE.Vector3(-14.8, 5.75, -22.8), // Far-left skyline turnaround
+      new THREE.Vector3(-15.8, 4.65, -24.0), // Smooth descending left bank -> closes into pt 0!
+    ];
+    // Smooth periodic rolls: exact 2π on exit right (u ~ 0.36..0.50) + exact 2π on upper return (u ~ 0.68..0.84)
+    const diamondRoll = (u) => {
+      const r1 = smoothstep(0.36, 0.50, u) * Math.PI * 2.0;
+      const r2 = smoothstep(0.68, 0.84, u) * Math.PI * 2.0;
+      return r1 + r2;
+    };
+    this.diamondTrack = new ClosedFlightTrack(diamondPts, DIAMOND_PERIOD, diamondRoll, 3.8);
+
+    // 2. Solo #5 Continuous Closed Circuit (30 s):
+    //    Low fast Left-to-Right Bay Bridge Knife-Edge Pass -> Climbing Right Loop-back ->
+    //    High Right-to-Left Inverted Mirror / Corkscrew Return -> Smooth Left Bank back in!
+    const solo5Pts = [
+      new THREE.Vector3(-14.8, 3.25, -20.8),
+      new THREE.Vector3(-7.4, 3.00, -18.0),
+      new THREE.Vector3(0.0, 3.15, -17.3),   // Low center Bay Bridge opposing cross!
+      new THREE.Vector3(7.6, 3.55, -18.0),
+      new THREE.Vector3(14.6, 4.95, -20.6),
+      new THREE.Vector3(15.2, 6.65, -23.6),
+      new THREE.Vector3(8.4, 6.85, -22.4),
+      new THREE.Vector3(0.4, 6.05, -19.0),   // High return pass with crisp aileron roll
+      new THREE.Vector3(-7.8, 6.55, -20.6),
+      new THREE.Vector3(-14.8, 6.10, -23.2),
+      new THREE.Vector3(-15.8, 4.55, -23.0),
+    ];
+    const solo5Roll = (u) => {
+      // 90° knife-edge bank through the Bay Bridge pass + crisp full 360° roll on high return
+      const knife = smoothBump(u, 0.08, 0.16, 0.24, 0.34) * (Math.PI * 0.48);
+      const highRoll = smoothstep(0.56, 0.78, u) * Math.PI * 2.0;
+      return knife + highRoll;
+    };
+    this.solo5Track = new ClosedFlightTrack(solo5Pts, SOLO_PERIOD, solo5Roll, 3.0);
+
+    // 3. Solo #6 Continuous Closed Circuit (30 s, mirrored opposing X direction!):
+    //    Low fast Right-to-Left Bay Bridge Opposing Knife-Edge Pass -> Climbing Left Turn ->
+    //    High Left-to-Right Corkscrew Roll Return -> Smooth Right Bank back in!
+    const solo6Pts = [
+      new THREE.Vector3(14.8, 3.30, -21.2),
+      new THREE.Vector3(7.4, 3.05, -18.5),
+      new THREE.Vector3(-0.1, 3.18, -17.9),  // Opposing cross right beside #5!
+      new THREE.Vector3(-7.6, 3.55, -18.5),
+      new THREE.Vector3(-14.6, 4.95, -21.0),
+      new THREE.Vector3(-15.2, 6.60, -23.8),
+      new THREE.Vector3(-8.4, 6.35, -22.2),
+      new THREE.Vector3(-0.2, 5.45, -18.8),  // Opposing high return pass
+      new THREE.Vector3(7.8, 6.20, -20.4),
+      new THREE.Vector3(14.8, 5.95, -23.2),
+      new THREE.Vector3(15.8, 4.55, -23.2),
+    ];
+    const solo6Roll = (u) => {
+      const knife = -smoothBump(u, 0.08, 0.16, 0.24, 0.34) * (Math.PI * 0.48);
+      const highRoll = -smoothstep(0.56, 0.78, u) * Math.PI * 2.0;
+      return knife + highRoll;
+    };
+    this.solo6Track = new ClosedFlightTrack(solo6Pts, SOLO_PERIOD, solo6Roll, 3.0);
+  }
+
   attachModel(templateModel) {
-    // Tune jet PBR materials so navy blue + bright gold livery pops cleanly out over San Francisco Bay
     templateModel.traverse((obj) => {
       if (!obj.isMesh || !obj.material) return;
       obj.castShadow = false;
@@ -288,8 +503,9 @@ export class BlueAngelsShow {
       this.group.add(jet);
       this.jets.push({
         mesh: jet,
-        prevPos: new THREE.Vector3(),
-        hasPrev: false,
+        pos: new THREE.Vector3(),
+        vel: new THREE.Vector3(),
+        gLoad: 0,
       });
 
       const ribbon = new SmokeTrailRibbon(this.smokeTex);
@@ -300,34 +516,33 @@ export class BlueAngelsShow {
     this.ready = true;
     this._prewarmTrails();
     window.__blueAngelsActive = true;
+    window.__blueAngelsShow = this;
   }
 
   applySkyMood(moodId) {
     if (moodId === 'twilight') {
       for (const tr of this.trails) tr.setMoodStyle(0xdfd4ee, 0.66);
       for (const m of this.jetMaterials) {
-        if (m.name === 'BA_InsigniaBlue') m.emissiveIntensity = 0.44;
-        else if (m.name === 'BA_InsigniaYellow') m.emissiveIntensity = 0.56;
+        if (m.name === 'BA_InsigniaBlue') m.emissiveIntensity = 0.46;
+        else if (m.name === 'BA_InsigniaYellow') m.emissiveIntensity = 0.68;
       }
     } else if (moodId === 'day') {
       for (const tr of this.trails) tr.setMoodStyle(0xffffff, 0.84);
       for (const m of this.jetMaterials) {
-        if (m.name === 'BA_InsigniaBlue') m.emissiveIntensity = 0.24;
-        else if (m.name === 'BA_InsigniaYellow') m.emissiveIntensity = 0.28;
+        if (m.name === 'BA_InsigniaBlue') m.emissiveIntensity = 0.28;
+        else if (m.name === 'BA_InsigniaYellow') m.emissiveIntensity = 0.42;
       }
     } else {
-      // Golden Hour warm sunlit cream contrails
       for (const tr of this.trails) tr.setMoodStyle(0xfff3de, 0.80);
       for (const m of this.jetMaterials) {
-        if (m.name === 'BA_InsigniaBlue') m.emissiveIntensity = 0.34;
-        else if (m.name === 'BA_InsigniaYellow') m.emissiveIntensity = 0.40;
+        if (m.name === 'BA_InsigniaBlue') m.emissiveIntensity = 0.42;
+        else if (m.name === 'BA_InsigniaYellow') m.emissiveIntensity = 0.62;
       }
     }
   }
 
   _prewarmTrails() {
-    // Simulate 3.4s of flight history so sweeping white smoke loops are already painted on frame 1!
-    const steps = 74;
+    const steps = 82;
     const startT = this.phaseOffset - steps * TRAIL_SAMPLE_DT;
     for (let s = 0; s <= steps; s++) {
       const t = startT + s * TRAIL_SAMPLE_DT;
@@ -337,288 +552,96 @@ export class BlueAngelsShow {
     for (const tr of this.trails) tr.updateGeometry(this.camera.position);
   }
 
-  // ---------- Analytic 3D Flight Path Evaluators (Strictly Inside Exterior Bay Airspace) ----------
-  _evalBossPos(act, u, out) {
-    if (act === 0) {
-      // ACT 0: Iconic Blue Angels Diamond Vertical Loop over the San Francisco Bay Bridge!
-      // u in [0, 0.24]: level entry from left; [0.24, 0.78]: full 360° vertical loop; [0.78, 1.0]: exit right w/ roll
-      const zBase = -20.4;
-      if (u < 0.24) {
-        const k = u / 0.24;
-        out.set(-15.5 + k * 14.9, 3.05, zBase);
-      } else if (u < 0.78) {
-        const a = ((u - 0.24) / 0.54) * Math.PI * 2.0; // 0 -> 2π CCW loop
-        const rx = 2.65;
-        const ry = 2.15;
-        // Gentle helical Z shift during loop so ascending & descending trails never self-intersect!
-        out.set(-0.60 + Math.sin(a) * rx, 5.20 - Math.cos(a) * ry, zBase - (a / (Math.PI * 2)) * 1.15);
-      } else {
-        const k = (u - 0.78) / 0.22;
-        out.set(-0.60 + k * 16.4, 3.05 + Math.sin(k * Math.PI) * 0.55, zBase - 1.15);
-      }
-      return;
+  /**
+   * Pure deterministic pose evaluator for any show timestamp `t` (used both live and by continuity tests).
+   */
+  evaluateJetPose(jetIdx, t, outPos, outQuat, outFwd) {
+    if (jetIdx < 4) {
+      const info = this.diamondTrack.sample(t, this._bossPos, this._bossQuat, this._bossFwd);
+      this._bossRight.set(1, 0, 0).applyQuaternion(this._bossQuat);
+      this._bossUp.set(0, 1, 0).applyQuaternion(this._bossQuat);
+
+      // Gentle Fleur-de-Lis spread during upper sky return pass, tightening smoothly back into razor-tight Diamond
+      const spread = 1.0 + 0.55 * smoothBump(info.u, 0.54, 0.64, 0.78, 0.90);
+      const off = DIAMOND_OFFSETS[jetIdx];
+      outPos.copy(this._bossPos)
+        .addScaledVector(this._bossRight, off.x * spread)
+        .addScaledVector(this._bossUp, off.y * spread)
+        .addScaledVector(this._bossFwd, off.z * (1.0 + (spread - 1.0) * 0.45));
+      outQuat.copy(this._bossQuat);
+      outFwd.copy(this._bossFwd);
+      return info;
     }
 
-    if (act === 1) {
-      // ACT 1: 6-Ship Delta Sweep & Climb into Center-Bay Fleur-de-Lis / Bomb Burst Break!
-      const x = 15.0 - u * 30.0;
-      const climb = Math.sin(u * Math.PI) * 3.15;
-      const z = -21.2 + Math.sin(u * Math.PI * 1.4) * 1.6;
-      out.set(x, 3.25 + climb, z);
-      return;
-    }
-
-    if (act === 2) {
-      // ACT 2: Diamond Double Synchronized Formation Barrel Roll across Upper-Mid Bay!
-      const x = -15.5 + u * 31.0;
-      const y = 5.25 + Math.sin(u * Math.PI * 2.0) * 0.95;
-      const z = -20.2 - Math.cos(u * Math.PI * 2.0) * 1.35;
-      out.set(x, y, z);
-      return;
-    }
-
-    // ACT 3: High-G Sweeping S-Turn / Figure-8 Banked Pass across the Bay!
-    const x = 15.5 - u * 31.0;
-    const y = 4.65 + Math.sin(u * Math.PI * 2.0 - 0.5) * 1.75;
-    const z = -20.8 + Math.sin(u * Math.PI) * 2.4;
-    out.set(x, y, z);
-  }
-
-  _evalBossOrientation(act, u) {
-    const eps = 0.0025;
-    const u0 = Math.max(0, u - eps);
-    const u1 = Math.min(1, u + eps);
-    this._evalBossPos(act, u, this._bossFrame.pos);
-    this._evalBossPos(act, u0, this._p0);
-    this._evalBossPos(act, u1, this._p1);
-
-    this._fwd.subVectors(this._p1, this._p0).normalize();
-
-    if (act === 0) {
-      // Singularity-free vertical loop frame tilted ~24° toward the bay viewer so all 4 Diamond jets
-      // show crisp 3/4 blue-and-yellow F/A-18 wings & twin canted tails all the way around the 360° loop!
-      const rollInLoop = u > 0.79 ? smoothstep(0.79, 0.95, u) * Math.PI * 2.0 : 0.0;
-      this._right.set(0.38, 0.0, 0.925).normalize();
-      // Orthogonalize right against forward
-      this._right.addScaledVector(this._fwd, -this._right.dot(this._fwd)).normalize();
-      this._up.crossVectors(this._fwd, this._right).normalize();
-      if (rollInLoop > 0) {
-        this._rollQ.setFromAxisAngle(this._fwd, rollInLoop);
-        this._right.applyQuaternion(this._rollQ);
-        this._up.applyQuaternion(this._rollQ);
-      }
-      this._bossFrame.fwd.copy(this._fwd);
-      this._bossFrame.right.copy(this._right);
-      this._bossFrame.up.copy(this._up);
-      this._bossFrame.smoke = u > 0.04 && u < 0.96;
-      return;
-    }
-
-    // Smooth general flight frame with dynamic roll/bank
-    this._up.set(0, 1, 0);
-    this._right.crossVectors(this._up, this._fwd).normalize();
-    this._up.crossVectors(this._fwd, this._right).normalize();
-
-    let rollAngle = 0.0;
-    if (act === 1) {
-      // Graceful banked approach into Delta break
-      rollAngle = Math.sin(u * Math.PI) * 0.55;
-    } else if (act === 2) {
-      // Two crisp 360° synchronized formation aileron/barrel rolls!
-      const r1 = smoothstep(0.20, 0.46, u) * Math.PI * 2.0;
-      const r2 = smoothstep(0.54, 0.80, u) * Math.PI * 2.0;
-      rollAngle = r1 + r2;
-    } else {
-      // High-G theatrical bank into S-turn curves (up to ~65° bank!)
-      rollAngle = Math.cos(u * Math.PI * 2.0 - 0.5) * 1.12;
-    }
-
-    if (Math.abs(rollAngle) > 1e-4) {
-      this._rollQ.setFromAxisAngle(this._fwd, rollAngle);
-      this._right.applyQuaternion(this._rollQ);
-      this._up.applyQuaternion(this._rollQ);
-    }
-
-    this._bossFrame.fwd.copy(this._fwd);
-    this._bossFrame.right.copy(this._right);
-    this._bossFrame.up.copy(this._up);
-    this._bossFrame.smoke = u > 0.04 && u < 0.96;
-  }
-
-  _evalSoloPos(act, u, soloIdx, out) {
-    // soloIdx: 0 = Jet #5 (Lead Solo), 1 = Jet #6 (Opposing Solo)
-    const dir = soloIdx === 0 ? 1 : -1;
-
-    if (act === 0) {
-      // Opposing High-Speed Knife-Edge Cross right over the Bay Bridge while Diamond loops overhead!
-      const su = Math.max(0, Math.min(1, (u - 0.14) / 0.74));
-      const x = -0.15 + dir * (-16.0 + su * 32.0);
-      const y = 3.08 + Math.sin(su * Math.PI) * 0.45 + (su > 0.65 ? Math.pow((su - 0.65) / 0.35, 1.8) * 2.2 : 0);
-      const z = -17.6 + dir * 0.48;
-      out.set(x, y, z);
-      return;
-    }
-
-    if (act === 2) {
-      // Iconic Blue Angels Mirror Pass: #5 flies INVERTED directly canopy-to-canopy above upright #6!
-      const x = 15.2 - u * 30.4;
-      const split = smoothstep(0.66, 0.96, u);
-      const yBase = 3.35 + Math.sin(u * Math.PI) * 0.32;
-      const y = soloIdx === 0
-        ? yBase + 0.56 + split * 2.4
-        : yBase - split * 0.55;
-      const z = -17.9 + (soloIdx === 0 ? -0.15 : 0.15);
-      out.set(x, y, z);
-      return;
-    }
-
-    // ACT 3: Twin Helical Corkscrew Climb spiraling dramatically around each other's smoke trails!
-    const x = -14.2 + u * 28.4;
-    const yCenter = 2.95 + u * 4.25;
-    const zCenter = -18.2 - Math.sin(u * Math.PI) * 1.2;
-    const helixAngle = u * Math.PI * 5.0 + (soloIdx === 1 ? Math.PI : 0.0);
-    const radius = 0.58 * Math.sin(u * Math.PI);
-    out.set(
-      x,
-      yCenter + Math.sin(helixAngle) * radius,
-      zCenter + Math.cos(helixAngle) * radius
-    );
-  }
-
-  _placeJetFromBasis(jetIdx, pos, right, up, fwd, smokeOn, recordSample) {
-    const entry = this.jets[jetIdx];
-    const mesh = entry.mesh;
-
-    mesh.position.copy(pos);
-    // Construct clean right-handed rotation matrix: local +X -> right, local +Y -> up, local +Z -> fwd (nose!)
-    this._basis.makeBasis(right, up, fwd);
-    this._q.setFromRotationMatrix(this._basis);
-    mesh.quaternion.copy(this._q);
-
-    // Detect act boundary wrap (> 5 m jump) to cleanly break smoke ribbon
-    const jumped = !entry.hasPrev || entry.prevPos.distanceToSquared(pos) > 25.0;
-    entry.prevPos.copy(pos);
-    entry.hasPrev = true;
-
-    if (recordSample) {
-      // Smoke injects from the right exhaust nozzle behind the tail (-0.52 along fwd)
-      this._exhaust.copy(pos)
-        .addScaledVector(fwd, -0.52)
-        .addScaledVector(right, 0.03);
-      this.trails[jetIdx].pushSample(this._exhaust, 0.0, jumped || !smokeOn);
-    }
+    const track = jetIdx === 4 ? this.solo5Track : this.solo6Track;
+    // Offset solo phase slightly so both solos converge directly over the Bay Bridge right as Diamond climbs the loop!
+    return track.sample(t - 1.5, outPos, outQuat, outFwd);
   }
 
   _evaluateAndPlace(t, recordSample) {
-    const cyc = ((t % CYCLE_DURATION) + CYCLE_DURATION) % CYCLE_DURATION;
-    const act = Math.floor(cyc / ACT_DURATION);
-    const u = (cyc - act * ACT_DURATION) / ACT_DURATION;
+    for (let i = 0; i < 6; i++) {
+      const info = this.evaluateJetPose(i, t, this._jetPos, this._jetQuat, this._jetFwd);
+      const entry = this.jets[i];
+      entry.mesh.position.copy(this._jetPos);
+      entry.mesh.quaternion.copy(this._jetQuat);
+      entry.pos.copy(this._jetPos);
+      entry.vel.copy(this._jetFwd).multiplyScalar(info.speed);
+      entry.gLoad = info.gLoad;
 
-    this._evalBossOrientation(act, u);
-    const bf = this._bossFrame;
-
-    // 1. Place Jets #1–#4 (Diamond) — or all 6 in Act 1 Delta + Fleur-de-Lis Bomb Burst!
-    if (act === 1) {
-      const burst = smoothstep(0.42, 0.94, u);
-      // 6 distinct radial Fleur-de-Lis / Bomb Burst break vectors (in Boss local frame + world fan!)
-      const burstVecs = [
-        new THREE.Vector3(0.0, 2.85, 0.6),    // #1 straight pitch-up climb!
-        new THREE.Vector3(3.4, 1.55, 0.2),    // #2 high-right break!
-        new THREE.Vector3(-3.4, 1.55, 0.2),   // #3 high-left break!
-        new THREE.Vector3(0.0, -1.95, 0.3),   // #4 low swoop!
-        new THREE.Vector3(4.5, -0.65, 0.9),   // #5 outer right break!
-        new THREE.Vector3(-4.5, -0.65, 0.9),  // #6 outer left break!
-      ];
-      const allOffsets = [...DIAMOND_OFFSETS, ...DELTA_EXTRA_OFFSETS];
-
-      for (let i = 0; i < 6; i++) {
-        const off = allOffsets[i];
-        const bv = burstVecs[i];
-        this._worldPos.copy(bf.pos)
-          .addScaledVector(bf.right, off.x + bv.x * burst)
-          .addScaledVector(bf.up, off.y + bv.y * burst)
-          .addScaledVector(bf.fwd, off.z + bv.z * burst);
-
-        // Compute tangent direction cleanly during the burst fan-out + victory aileron roll!
-        const rVec = this._right.copy(bf.right);
-        const uVec = this._up.copy(bf.up);
-        const fVec = this._fwd.copy(bf.fwd);
-        if (burst > 0.01) {
-          const eps = 0.004;
-          const b1 = smoothstep(0.42, 0.94, Math.min(1, u + eps));
-          const db = (b1 - burst) / eps;
-          // Velocity nudge from burst expansion
-          fVec.addScaledVector(bf.right, (bv.x * db) * 0.032)
-            .addScaledVector(bf.up, (bv.y * db) * 0.032)
-            .normalize();
-          rVec.crossVectors(uVec, fVec).normalize();
-          uVec.crossVectors(fVec, rVec).normalize();
-
-          const victoryRoll = burst * Math.PI * 3.0 * (i % 2 === 0 ? 1 : -1);
-          this._rollQ.setFromAxisAngle(fVec, victoryRoll);
-          rVec.applyQuaternion(this._rollQ);
-          uVec.applyQuaternion(this._rollQ);
-        }
-        this._placeJetFromBasis(i, this._worldPos, rVec, uVec, fVec, bf.smoke, recordSample);
+      if (recordSample) {
+        // Right exhaust smoke nozzle (-0.54 along fwd)
+        this._exhaust.copy(this._jetPos).addScaledVector(this._jetFwd, -0.54);
+        this.trails[i].pushSample(this._exhaust, 0.0);
       }
-      return;
+    }
+  }
+
+  getAudioMetrics() {
+    if (!this.ready) return this._audioMetrics;
+
+    const camPos = this.camera.position;
+    let totalWeight = 0;
+    let weightedPan = 0;
+    let weightedDoppler = 0;
+    let weightedBright = 0;
+    let maxAfterburner = 0;
+
+    for (let i = 0; i < this.jets.length; i++) {
+      const j = this.jets[i];
+      this._toCam.subVectors(camPos, j.pos);
+      const dist = Math.max(8.0, this._toCam.length());
+      this._toCam.divideScalar(dist);
+
+      // Weight loudest jets closest to the center window pane
+      const horizFactor = Math.exp(-(j.pos.x * j.pos.x) / 170.0);
+      const distWeight = Math.pow(18.5 / dist, 2.2) * (0.35 + 0.65 * horizFactor);
+
+      // Physical acoustic Doppler factor: approaching (>1.0 pitch), receding (<1.0 pitch)
+      const vRadial = j.vel.dot(this._toCam); // positive when approaching camera
+      const doppler = Math.max(0.76, Math.min(1.28, 1.0 / (1.0 - vRadial / 34.0)));
+
+      const pan = Math.max(-0.9, Math.min(0.9, j.pos.x / 11.5));
+      const bright = Math.max(0.0, Math.min(1.0, (24.0 - dist) / 8.0)) * horizFactor;
+
+      totalWeight += distWeight;
+      weightedPan += pan * distWeight;
+      weightedDoppler += doppler * distWeight;
+      weightedBright += bright * distWeight;
+      maxAfterburner = Math.max(maxAfterburner, j.gLoad * horizFactor);
     }
 
-    // Place #1–#4 Diamond locked in Boss's local frame
-    for (let i = 0; i < 4; i++) {
-      const off = DIAMOND_OFFSETS[i];
-      this._worldPos.copy(bf.pos)
-        .addScaledVector(bf.right, off.x)
-        .addScaledVector(bf.up, off.y)
-        .addScaledVector(bf.fwd, off.z);
-      this._placeJetFromBasis(i, this._worldPos, bf.right, bf.up, bf.fwd, bf.smoke, recordSample);
-    }
+    const norm = Math.max(0.001, totalWeight);
+    // Closer camera to window (e.g. Skyline View vs Desk) subtly opens acoustic presence
+    const camZ = camPos.z;
+    const windowProximity = Math.max(0.55, Math.min(1.20, 0.62 + (1.9 - camZ) * 0.28));
 
-    // Place #5 & #6 Solos (Acts 0, 2, 3)
-    const eps = 0.0025;
-    for (let s = 0; s < 2; s++) {
-      const jetIdx = 4 + s;
-      const u0 = Math.max(0, u - eps);
-      const u1 = Math.min(1, u + eps);
-      this._evalSoloPos(act, u, s, this._worldPos);
-      this._evalSoloPos(act, u0, s, this._p0);
-      this._evalSoloPos(act, u1, s, this._p1);
-
-      this._fwd.subVectors(this._p1, this._p0).normalize();
-      this._up.set(0, 1, 0);
-      this._right.crossVectors(this._up, this._fwd).normalize();
-      this._up.crossVectors(this._fwd, this._right).normalize();
-
-      let roll = 0.0;
-      let smokeOn = u > 0.04 && u < 0.96;
-      if (act === 0) {
-        smokeOn = u > 0.16 && u < 0.86;
-        // 90° Knife-edge roll right through center window + exit roll!
-        const knife = Math.sin(smoothstep(0.24, 0.72, u) * Math.PI) * (Math.PI * 0.48) * (s === 0 ? 1 : -1);
-        const exitRoll = smoothstep(0.68, 0.86, u) * Math.PI * 2.0 * (s === 0 ? 1 : -1);
-        roll = knife + exitRoll;
-      } else if (act === 2) {
-        // Mirror Pass: #5 rolls inverted (π rad) right above upright #6, then snaps upright on exit!
-        if (s === 0) {
-          const invIn = smoothstep(0.06, 0.18, u);
-          const invOut = smoothstep(0.66, 0.78, u);
-          roll = Math.PI * (invIn - invOut) + smoothstep(0.76, 0.94, u) * Math.PI * 2.0;
-        } else {
-          roll = smoothstep(0.72, 0.92, u) * -Math.PI * 2.0;
-        }
-      } else if (act === 3) {
-        // Continuous corkscrew aileron roll synchronized with helix!
-        roll = u * Math.PI * 6.0 * (s === 0 ? 1 : -1);
-      }
-
-      if (Math.abs(roll) > 1e-4) {
-        this._rollQ.setFromAxisAngle(this._fwd, roll);
-        this._right.applyQuaternion(this._rollQ);
-        this._up.applyQuaternion(this._rollQ);
-      }
-
-      this._placeJetFromBasis(jetIdx, this._worldPos, this._right, this._up, this._fwd, smokeOn, recordSample);
-    }
+    this._audioMetrics.intensity = Math.min(1.0, totalWeight * 0.26);
+    this._audioMetrics.pan = weightedPan / norm;
+    this._audioMetrics.doppler = weightedDoppler / norm;
+    this._audioMetrics.brightness = Math.min(1.0, weightedBright / norm);
+    this._audioMetrics.afterburner = maxAfterburner;
+    this._audioMetrics.windowProximity = windowProximity;
+    return this._audioMetrics;
   }
 
   update(dt) {
