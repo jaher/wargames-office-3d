@@ -297,6 +297,11 @@ def test_live_scene_window_and_assets(port):
         df_front = fans_after["RTX3090_FanFront"] - fans_before["RTX3090_FanFront"]
         df_back = fans_after["RTX3090_FanBack"] - fans_before["RTX3090_FanBack"]
         assert df_front > 0.15 and df_back < -0.15, f"RTX 3090 fans not spinning: before={fans_before}, after={fans_after}"
+        # Verify 86-key 3D Corsair K70 keyboard animation rig is active and syncs shifted/regular keystrokes
+        kb_state = cdp.eval("(() => { window.__keyboardRig?.pressKey('#'); return window.__keyboardRig?.getState(); })()")
+        assert kb_state and kb_state["keyCount"] == 86, f"Keyboard rig missing keys: {kb_state}"
+        pressed_names = {k["name"] for k in kb_state.get("active", []) if k["offsetMm"] > 0}
+        assert "3" in pressed_names and "RSHIFT" in pressed_names, f"Shifted keystroke '#' did not depress RSHIFT+3: {kb_state}"
         assert preamble["jumpCount"] > 0 and preamble["transcriptCount"] > 0, f"Revealed before solutions/narration ready: {preamble}"
 
         active_cam = cdp.eval("document.querySelector('.cam-btn.active')?.dataset?.cam")

@@ -91,9 +91,10 @@ function parseBanditFromIndexHtml(html) {
 }
 
 export class SolutionsController {
-  constructor(dom, onScreenUpdate) {
+  constructor(dom, onScreenUpdate, onKeyPress = null) {
     this.dom = dom;
     this.onScreenUpdate = onScreenUpdate;
+    this.onKeyPress = onKeyPress;
 
     this.games = {};
     this.gameKey = 'vortex';
@@ -901,6 +902,12 @@ export class SolutionsController {
     for (const d of this.dom.narrTranscript.children) d.classList.remove('active');
   }
 
+  _emitKey(key) {
+    if (this.onKeyPress && !this.narrFF && key) {
+      this.onKeyPress(key);
+    }
+  }
+
   _emitScreen() {
     if (!this.onScreenUpdate) return;
     const activeText =
@@ -981,13 +988,16 @@ export class SolutionsController {
         await this._sleep();
         if (my !== this.runId) return;
       }
-      screenEntry.text += cleanCmd[i];
+      const ch = cleanCmd[i];
+      screenEntry.text += ch;
+      this._emitKey(ch);
       if (i % 2 === 0 || i === cleanCmd.length - 1 || this.narrFF) {
         this._emitScreen();
       }
       await this._delay((24 + Math.random() * 65) * this._speed());
       if (Math.random() < 0.05) await this._delay(200 * this._speed());
     }
+    this._emitKey('ENTER');
     screenEntry.typing = false;
     this._emitScreen();
     await this._delay(240 * this._speed());
@@ -1119,9 +1129,11 @@ export class SolutionsController {
 
     const typeChars = async (n, text) => {
       for (let k = 0; k < text.length; k++) {
-        buf[n] += text[k];
+        const ch = text[k];
+        buf[n] += ch;
         curCol++;
         dirty = true;
+        this._emitKey(ch);
         if (k % 2 === 0 || k === text.length - 1 || this.narrFF) render();
         if (!(await waitChar())) return false;
       }
@@ -1131,6 +1143,7 @@ export class SolutionsController {
     render();
     await this._delay(280 * this._speed());
     let lastGated = -1;
+    let inInsertMode = false;
     for (const a of actions) {
       if (my !== this.runId) return;
       if (a.s !== undefined && a.s !== lastGated) {
@@ -1142,6 +1155,8 @@ export class SolutionsController {
         for (const k of Object.keys(buf)) delete buf[k];
         topLine = 1; curLine = 1; curCol = 1; dirty = false;
         modeText = '';
+        inInsertMode = false;
+        this._emitKey('ESC');
         render();
         await this._delay(260 * this._speed());
       } else if (a.t === 'paste') {
@@ -1150,39 +1165,54 @@ export class SolutionsController {
         dirty = true;
         ensureVisible();
         modeText = '-- INSERT --';
+        this._emitKey('p');
         render();
         await this._delay(260 * this._speed());
       } else if (a.t === 'type') {
         buf[a.n] = '';
         curLine = a.n; curCol = 1;
         ensureVisible();
+        if (!inInsertMode) {
+          this._emitKey('i');
+          inInsertMode = true;
+        }
         modeText = '-- INSERT --';
         render();
         if (!(await typeChars(a.n, a.text))) return;
+        this._emitKey('ENTER');
         curCol = a.text.length + 1;
         render();
         await this._delay(50 * this._speed());
       } else if (a.t === 'edit') {
         modeText = '';
+        inInsertMode = false;
+        this._emitKey('ESC');
         curLine = a.n; curCol = 1;
         ensureVisible();
         render();
         await this._delay(200 * this._speed());
         if (my !== this.runId) return;
         buf[a.n] = '';
+        this._emitKey('i');
+        inInsertMode = true;
         modeText = '-- INSERT --';
         render();
         if (!(await typeChars(a.n, a.text))) return;
+        this._emitKey('ENTER');
         curCol = a.text.length + 1;
         ensureVisible();
         render();
         await this._delay(100 * this._speed());
       } else if (a.t === 'wq') {
         modeText = '';
+        inInsertMode = false;
         this.screenVim = { ...this.screenVim, status: ':wq', mode: '' };
         this._emitScreen();
-        await this._delay(360 * this._speed());
-        if (my !== this.runId) return;
+        for (const k of ['ESC', ':', 'w', 'q', 'ENTER']) {
+          this._emitKey(k);
+          await this._delay(70 * this._speed());
+          if (my !== this.runId) return;
+        }
         dirty = false;
         render();
         await this._delay(180 * this._speed());

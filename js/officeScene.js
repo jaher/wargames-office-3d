@@ -948,6 +948,7 @@ export class OfficeScene {
     this.spinningFans = [];
     this.lavaBlobs = [];
     this.lavaLight = null;
+    this.keyboardRig = null;
     this.sunBeams = [];
     this.clickableMeshes = [];
     this.dustPoints = null;
@@ -2776,6 +2777,7 @@ export class OfficeScene {
           }
         }
       });
+      this._initKeyboardRig(kb);
       this._addContactShadow(deskGroup, -0.68, sy + 0.00465, -0.72, 0.385, 0.155, 0.86);
       deskGroup.add(kb);
     });
@@ -3880,6 +3882,317 @@ export class OfficeScene {
     this.dustPoints = null;
   }
 
+  // ---------- Live Mechanical Keycap Animation Rig (Corsair K70 PRO TKL — 86 Individual Keycaps, 0 Extra Draw Calls) ----------
+  _initKeyboardRig(kb) {
+    let keyMesh = null;
+    kb.traverse((obj) => {
+      if (obj.isMesh && (obj.name === 'K70_Keycaps' || obj.name === 'K70_KeycapsM' || obj.material?.name === 'CorsairKB_KeycapPBT')) {
+        keyMesh = obj;
+      }
+    });
+    if (!keyMesh || !keyMesh.geometry?.attributes?.position) return;
+
+    const geo = keyMesh.geometry;
+    const pos = geo.attributes.position;
+    const idx = geo.index;
+    const vCount = pos.count;
+
+    // Partition single K70_Keycaps mesh into 86 individual disconnected keycap islands via union-find
+    const parent = new Int32Array(vCount);
+    for (let i = 0; i < vCount; i++) parent[i] = i;
+    const find = (a) => {
+      while (parent[a] !== a) {
+        parent[a] = parent[parent[a]];
+        a = parent[a];
+      }
+      return a;
+    };
+    const unite = (a, b) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra !== rb) parent[ra] = rb;
+    };
+
+    const posMap = new Map();
+    for (let i = 0; i < vCount; i++) {
+      const k = `${Math.round(pos.getX(i) * 2000)},${Math.round(pos.getY(i) * 2000)},${Math.round(pos.getZ(i) * 2000)}`;
+      const prev = posMap.get(k);
+      if (prev !== undefined) unite(i, prev);
+      else posMap.set(k, i);
+    }
+    if (idx) {
+      const arr = idx.array;
+      for (let i = 0; i < arr.length; i += 3) {
+        unite(arr[i], arr[i + 1]);
+        unite(arr[i + 1], arr[i + 2]);
+      }
+    }
+
+    const compMap = new Map();
+    for (let i = 0; i < vCount; i++) {
+      const r = find(i);
+      let list = compMap.get(r);
+      if (!list) {
+        list = [];
+        compMap.set(r, list);
+      }
+      list.push(i);
+    }
+
+    const islands = [];
+    for (const vs of compMap.values()) {
+      let minX = Infinity, maxX = -Infinity;
+      let minY = Infinity, maxY = -Infinity;
+      let minZ = Infinity, maxZ = -Infinity;
+      const verts = new Int32Array(vs.length);
+      const baseY = new Float32Array(vs.length);
+      for (let i = 0; i < vs.length; i++) {
+        const vi = vs[i];
+        verts[i] = vi;
+        const vx = pos.getX(vi);
+        const vy = pos.getY(vi);
+        const vz = pos.getZ(vi);
+        baseY[i] = vy;
+        if (vx < minX) minX = vx;
+        if (vx > maxX) maxX = vx;
+        if (vy < minY) minY = vy;
+        if (vy > maxY) maxY = vy;
+        if (vz < minZ) minZ = vz;
+        if (vz > maxZ) maxZ = vz;
+      }
+      islands.push({
+        verts,
+        baseY,
+        cx: (minX + maxX) * 0.5,
+        cz: (minZ + maxZ) * 0.5,
+        topY: maxY,
+        wx: maxX - minX,
+        wz: maxZ - minZ,
+        press: 0,
+        pressedAt: 0,
+        holdMs: 85,
+        glow: 0,
+        lastOffset: 0,
+      });
+    }
+
+    // Cluster into the 6 exact physical rows by Z, then left-to-right by X
+    islands.sort((a, b) => a.cz - b.cz);
+    const rows = [];
+    for (const isl of islands) {
+      if (!rows.length || Math.abs(isl.cz - rows[rows.length - 1][0].cz) > 0.010) {
+        rows.push([isl]);
+      } else {
+        rows[rows.length - 1].push(isl);
+      }
+    }
+
+    const K70_ROWS = [
+      ['ESC', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'PROFILE', 'PLAYPAUSE'],
+      ['`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'BACKSPACE', 'INS', 'HOME', 'PGUP'],
+      ['TAB', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[', ']', '\\', 'DEL', 'END', 'PGDN'],
+      ['CAPS', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';', "'", 'ENTER'],
+      ['LSHIFT', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ',', '.', '/', 'RSHIFT', 'UP'],
+      ['LCTRL', 'WIN', 'LALT', 'SPACE', 'RALT', 'FN', 'MENU', 'RCTRL', 'LEFT', 'DOWN', 'RIGHT'],
+    ];
+
+    const keyMap = new Map();
+    for (let r = 0; r < Math.min(rows.length, K70_ROWS.length); r++) {
+      rows[r].sort((a, b) => a.cx - b.cx);
+      const names = K70_ROWS[r];
+      for (let c = 0; c < Math.min(rows[r].length, names.length); c++) {
+        const keyObj = rows[r][c];
+        keyObj.name = names[c];
+        keyMap.set(names[c], keyObj);
+      }
+    }
+
+    // Estimate keyboard plate forward tilt (front-to-back slope) so reactive glow quads sit flush on tilted keycaps
+    const slopeTilt = rows.length >= 2
+      ? Math.atan2(rows[0][0].topY - rows[rows.length - 1][0].topY, rows[rows.length - 1][0].cz - rows[0][0].cz)
+      : 0.07;
+
+    // Pooled Corsair iCUE reactive per-key cyan-white glow quads (reuses MeshBasicMaterial, 0 extra shader compiles!)
+    const glowPool = [];
+    const glowGeo = new THREE.PlaneGeometry(1, 1);
+    for (let i = 0; i < 6; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x70ecff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        forceSinglePass: true,
+      });
+      const m = new THREE.Mesh(glowGeo, mat);
+      m.rotation.x = -Math.PI / 2 + slopeTilt;
+      m.visible = false;
+      m.renderOrder = 6;
+      keyMesh.parent.add(m);
+      glowPool.push(m);
+    }
+
+    this.keyboardRig = {
+      keyMesh,
+      posAttr: pos,
+      keyMap,
+      activeKeys: new Set(),
+      glowPool,
+      travel: 0.0044, // 4.4mm crisp visible mechanical keycap travel
+      lastTyped: '',
+    };
+
+    if (typeof window !== 'undefined') {
+      window.__keyboardRig = {
+        keyCount: keyMap.size,
+        pressKey: (k) => {
+          this.pressKeyboardKey(k);
+          this._updateKeyboardRig();
+        },
+        getState: () => ({
+          keyCount: keyMap.size,
+          lastTyped: this.keyboardRig?.lastTyped || '',
+          active: [...(this.keyboardRig?.activeKeys || [])].map((k) => ({
+            name: k.name,
+            press: +k.press.toFixed(3),
+            offsetMm: +(k.lastOffset * 1000).toFixed(2),
+          })),
+        }),
+      };
+    }
+  }
+
+  pressKeyboardKey(keyOrChar) {
+    const rig = this.keyboardRig;
+    if (!rig || !keyOrChar) return;
+
+    const LEFT_HAND_SHIFTED = new Set(['Q', 'W', 'E', 'R', 'T', 'A', 'S', 'D', 'F', 'G', 'Z', 'X', 'C', 'V', 'B']);
+    const SHIFT_SYMBOLS = {
+      '~': ['`', 'RSHIFT'],
+      '!': ['1', 'RSHIFT'],
+      '@': ['2', 'RSHIFT'],
+      '#': ['3', 'RSHIFT'],
+      '$': ['4', 'RSHIFT'],
+      '%': ['5', 'RSHIFT'],
+      '^': ['6', 'LSHIFT'],
+      '&': ['7', 'LSHIFT'],
+      '*': ['8', 'LSHIFT'],
+      '(': ['9', 'LSHIFT'],
+      ')': ['0', 'LSHIFT'],
+      '_': ['-', 'LSHIFT'],
+      '+': ['=', 'LSHIFT'],
+      '{': ['[', 'LSHIFT'],
+      '}': [']', 'LSHIFT'],
+      '|': ['\\', 'LSHIFT'],
+      ':': [';', 'LSHIFT'],
+      '"': ["'", 'LSHIFT'],
+      '<': [',', 'LSHIFT'],
+      '>': ['.', 'LSHIFT'],
+      '?': ['/', 'LSHIFT'],
+    };
+
+    const keysToPress = [];
+    if (keyOrChar === ' ' || keyOrChar === 'SPACE') {
+      keysToPress.push('SPACE');
+    } else if (keyOrChar === '\n' || keyOrChar === '\r' || keyOrChar === 'ENTER') {
+      keysToPress.push('ENTER');
+    } else if (keyOrChar === '\t' || keyOrChar === 'TAB') {
+      keysToPress.push('TAB');
+    } else if (rig.keyMap.has(keyOrChar)) {
+      keysToPress.push(keyOrChar);
+    } else if (SHIFT_SYMBOLS[keyOrChar]) {
+      const [baseKey, shiftKey] = SHIFT_SYMBOLS[keyOrChar];
+      keysToPress.push(shiftKey, baseKey);
+    } else if (keyOrChar.length === 1) {
+      const up = keyOrChar.toUpperCase();
+      if (rig.keyMap.has(up)) {
+        if (keyOrChar >= 'A' && keyOrChar <= 'Z') {
+          keysToPress.push(LEFT_HAND_SHIFTED.has(up) ? 'RSHIFT' : 'LSHIFT');
+        }
+        keysToPress.push(up);
+      }
+    }
+
+    if (!keysToPress.length) return;
+    const now = performance.now();
+    rig.lastTyped = String(keyOrChar);
+    for (const kName of keysToPress) {
+      const k = rig.keyMap.get(kName);
+      if (!k) continue;
+      const isShift = kName === 'LSHIFT' || kName === 'RSHIFT';
+      k.pressedAt = now;
+      k.holdMs = isShift ? 120 : 85;
+      k.glow = 1.0;
+      rig.activeKeys.add(k);
+    }
+  }
+
+  _updateKeyboardRig() {
+    const rig = this.keyboardRig;
+    if (!rig || rig.activeKeys.size === 0) return;
+
+    const { posAttr, activeKeys, glowPool, travel } = rig;
+    const now = performance.now();
+    const attackMs = 26;
+    const releaseMs = 110;
+    const glowMs = 210;
+    let dirty = false;
+    let glowIdx = 0;
+
+    for (const k of [...activeKeys]) {
+      const age = Math.max(0, now - k.pressedAt);
+      const totalKeyMs = attackMs + k.holdMs + releaseMs;
+
+      if (age < attackMs) {
+        k.press = Math.min(1, 0.25 + 0.75 * (age / attackMs));
+      } else if (age < attackMs + k.holdMs) {
+        k.press = 1.0;
+      } else if (age < totalKeyMs) {
+        k.press = Math.max(0, 1.0 - (age - attackMs - k.holdMs) / releaseMs);
+      } else {
+        k.press = 0;
+      }
+      k.glow = Math.max(0, 1.0 - age / glowMs);
+
+      const offset = k.press * travel;
+      if (Math.abs(offset - k.lastOffset) > 1e-6) {
+        const verts = k.verts;
+        const baseY = k.baseY;
+        for (let i = 0; i < verts.length; i++) {
+          posAttr.setY(verts[i], baseY[i] - offset);
+        }
+        k.lastOffset = offset;
+        dirty = true;
+      }
+
+      if (k.glow > 0.02 && glowIdx < glowPool.length) {
+        const gm = glowPool[glowIdx++];
+        gm.visible = true;
+        gm.position.set(k.cx, k.topY - offset + 0.0008, k.cz);
+        gm.scale.set(k.wx * 0.76, k.wz * 0.70, 1);
+        gm.material.opacity = 0.44 * k.glow;
+      }
+
+      if (age >= Math.max(totalKeyMs, glowMs)) {
+        if (k.lastOffset !== 0) {
+          for (let i = 0; i < k.verts.length; i++) {
+            posAttr.setY(k.verts[i], k.baseY[i]);
+          }
+          k.lastOffset = 0;
+          dirty = true;
+        }
+        activeKeys.delete(k);
+      }
+    }
+
+    for (let i = glowIdx; i < glowPool.length; i++) {
+      glowPool[i].visible = false;
+    }
+    if (dirty) {
+      posAttr.needsUpdate = true;
+    }
+  }
+
   // ---------- Sky Mood Switching ----------
   applySkyMood(index) {
     this.moodIndex = ((index % SKY_MOODS.length) + SKY_MOODS.length) % SKY_MOODS.length;
@@ -4079,6 +4392,8 @@ export class OfficeScene {
       if (this.omarchyScreen) {
         this.omarchyScreen.tick(elapsed);
       }
+
+      this._updateKeyboardRig();
 
       if (this.blueAngels) {
         this.blueAngels.update(dt);

@@ -213,9 +213,15 @@ function bootstrap() {
 
   // Load OverTheWire solutions & voice narration while holding the loading preamble
   // until every 3D model, skyline texture, and initial solution/narration asset is ready.
-  const solutions = new SolutionsController(dom, (screenState) => {
-    omarchyScreen.update(screenState);
-  });
+  const solutions = new SolutionsController(
+    dom,
+    (screenState) => {
+      omarchyScreen.update(screenState);
+    },
+    (key) => {
+      if (office) office.pressKeyboardKey(key);
+    }
+  );
 
   let sceneDone = 0;
   let sceneTotal = 1;

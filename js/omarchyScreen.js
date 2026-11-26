@@ -5,7 +5,7 @@ import * as THREE from 'three';
 // onto a razor-sharp 21:9 ultrawide 2560x1080 CanvasTexture matching the 34" Dell U3425WE.
 export class OmarchyScreen {
   constructor() {
-    this.scale = 0.75;
+    this.scale = 0.85;
     this.width = 2560;
     this.height = 1080;
     this.canvas = document.createElement('canvas');
@@ -144,8 +144,18 @@ export class OmarchyScreen {
     ctx.fillStyle = color;
     ctx.lineWidth = 2;
     if (type === 'cpu') {
-      ctx.strokeRect(x, y - 9, 14, 14);
-      ctx.fillRect(x + 4, y - 5, 6, 6);
+      // Realistic pinned LGA/QFP CPU package icon
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(x + 2, y - 8, 12, 12);
+      ctx.fillRect(x + 5, y - 5, 6, 6);
+      ctx.beginPath();
+      for (const off of [4.5, 8, 11.5]) {
+        ctx.moveTo(x + off, y - 11); ctx.lineTo(x + off, y - 8);
+        ctx.moveTo(x + off, y + 4); ctx.lineTo(x + off, y + 7);
+        ctx.moveTo(x - 1, y - 10 + off); ctx.lineTo(x + 2, y - 10 + off);
+        ctx.moveTo(x + 14, y - 10 + off); ctx.lineTo(x + 17, y - 10 + off);
+      }
+      ctx.stroke();
     } else if (type === 'mem') {
       ctx.strokeRect(x, y - 8, 16, 11);
       ctx.fillRect(x + 3, y - 5, 3, 5);
@@ -182,6 +192,286 @@ export class OmarchyScreen {
       ctx.lineTo(x + 5, y - 9);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  // Photorealistic retail Intel Core Ultra 9 285K (Arrow Lake-S, LGA 1851: 37.5 x 45.0 mm FC-LGA)
+  // Accurate rectangular fiberglass substrate, dual LGA 1851 side keying notches, gold Pin-1 triangle,
+  // stepped winged brushed-nickel IHS with clamp ears, SMD decoupling capacitors, vent pinhole,
+  // 2D laser Data Matrix, and authentic retail laser-etched markings (intel CORE ULTRA 9 285K / SRQD5 / 3.70GHZ).
+  _drawRealisticCPUChip(ctx, x, y, w, h) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    // Subtle recessed drop shadow on dark terminal tile
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 5;
+
+    // 1. Multi-layer teal-emerald fiberglass FC-LGA 1851 PCB substrate (37.5 x 45.0 mm ratio) with keying notches
+    const r = 6;
+    const notchDepth = w * 0.048;
+    const notchH = h * 0.072;
+    const nTopY = h * 0.21;
+    const nBotY = h * 0.72;
+
+    const pcbGrad = ctx.createLinearGradient(0, 0, w, h);
+    pcbGrad.addColorStop(0.0, '#18545a');
+    pcbGrad.addColorStop(0.35, '#13444b');
+    pcbGrad.addColorStop(0.70, '#0f363d');
+    pcbGrad.addColorStop(1.0, '#0b292f');
+
+    ctx.beginPath();
+    ctx.moveTo(r, 0);
+    ctx.lineTo(w - r, 0);
+    ctx.quadraticCurveTo(w, 0, w, r);
+    // Right edge with upper & lower LGA 1851 retention keying notches
+    ctx.lineTo(w, nTopY);
+    ctx.quadraticCurveTo(w - notchDepth, nTopY + notchH * 0.5, w, nTopY + notchH);
+    ctx.lineTo(w, nBotY);
+    ctx.quadraticCurveTo(w - notchDepth, nBotY + notchH * 0.5, w, nBotY + notchH);
+    ctx.lineTo(w, h - r);
+    ctx.quadraticCurveTo(w, h, w - r, h);
+    ctx.lineTo(r, h);
+    ctx.quadraticCurveTo(0, h, 0, h - r);
+    // Left edge with upper & lower LGA 1851 retention keying notches
+    ctx.lineTo(0, nBotY + notchH);
+    ctx.quadraticCurveTo(notchDepth, nBotY + notchH * 0.5, 0, nBotY);
+    ctx.lineTo(0, nTopY + notchH);
+    ctx.quadraticCurveTo(notchDepth, nTopY + notchH * 0.5, 0, nTopY);
+    ctx.lineTo(0, r);
+    ctx.quadraticCurveTo(0, 0, r, 0);
+    ctx.closePath();
+    ctx.fillStyle = pcbGrad;
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Crisp gold-copper substrate edge bevel
+    ctx.strokeStyle = 'rgba(130, 198, 196, 0.35)';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    // Subtle PCB copper trace micro-lines on exposed top & bottom substrate margins
+    ctx.strokeStyle = 'rgba(72, 168, 162, 0.22)';
+    ctx.lineWidth = 0.9;
+    for (let i = 0; i < 9; i++) {
+      const tx = w * (0.14 + i * 0.09);
+      ctx.beginPath();
+      ctx.moveTo(tx, 3);
+      ctx.lineTo(tx, h * 0.08);
+      ctx.moveTo(tx, h - 3);
+      ctx.lineTo(tx, h * 0.92);
+      ctx.stroke();
+    }
+
+    // Gold Pin-1 alignment triangle in bottom-left corner of substrate (exact Intel LGA convention)
+    const tri = w * 0.088;
+    ctx.fillStyle = '#e5bd5a';
+    ctx.beginPath();
+    ctx.moveTo(4, h - 4);
+    ctx.lineTo(4 + tri, h - 4);
+    ctx.lineTo(4, h - 4 - tri);
+    ctx.closePath();
+    ctx.fill();
+
+    // Small gold fiducial / test pads on other 3 corners
+    ctx.fillStyle = '#d4aa4c';
+    ctx.beginPath();
+    ctx.arc(w - 8, 8, 2.2, 0, Math.PI * 2);
+    ctx.arc(8, 8, 2.0, 0, Math.PI * 2);
+    ctx.arc(w - 8, h - 8, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tiny surface-mount ceramic capacitors (MLCCs) along exposed substrate edges
+    const drawCap = (cx, cy, horiz = true) => {
+      const cw = horiz ? 5.2 : 2.6;
+      const ch = horiz ? 2.6 : 5.2;
+      ctx.fillStyle = '#c5cdd8';
+      ctx.fillRect(cx - cw / 2, cy - ch / 2, cw, ch);
+      ctx.fillStyle = '#9b7444';
+      if (horiz) ctx.fillRect(cx - cw * 0.28, cy - ch / 2, cw * 0.56, ch);
+      else ctx.fillRect(cx - cw / 2, cy - ch * 0.28, cw, ch * 0.56);
+    };
+    for (let i = 0; i < 5; i++) {
+      drawCap(w * (0.24 + i * 0.13), h * 0.045, true);
+      drawCap(w * (0.26 + i * 0.12), h * 0.955, true);
+    }
+
+    // 2. Dark silicone/epoxy perimeter seal skirt under the Integrated Heat Spreader (IHS)
+    const ihsX = w * 0.115;
+    const ihsY = h * 0.082;
+    const ihsW = w * 0.77;
+    const ihsH = h * 0.836;
+    const earW = w * 0.056; // LGA 1851 ILM retention clamp shoulders on left & right middle
+    const earY0 = h * 0.31;
+    const earY1 = h * 0.69;
+
+    const traceIHSPath = (inset = 0) => {
+      const x0 = ihsX + inset;
+      const y0 = ihsY + inset;
+      const x1 = ihsX + ihsW - inset;
+      const y1 = ihsY + ihsH - inset;
+      const exL = ihsX - earW + inset;
+      const exR = ihsX + ihsW + earW - inset;
+      const ey0 = earY0 + inset * 0.6;
+      const ey1 = earY1 - inset * 0.6;
+      const c = Math.max(2, 6 - inset * 0.5);
+      const ec = Math.max(1.5, 3.5 - inset * 0.3);
+
+      ctx.beginPath();
+      ctx.moveTo(x0 + c, y0);
+      ctx.lineTo(x1 - c, y0);
+      ctx.quadraticCurveTo(x1, y0, x1, y0 + c);
+      // Step out to right ILM retention shoulder
+      ctx.lineTo(x1, ey0 - ec);
+      ctx.lineTo(exR - ec, ey0 + 2);
+      ctx.quadraticCurveTo(exR, ey0 + 4, exR, ey0 + 4 + ec);
+      ctx.lineTo(exR, ey1 - 4 - ec);
+      ctx.quadraticCurveTo(exR, ey1 - 4, exR - ec, ey1 - 2);
+      ctx.lineTo(x1, ey1 + ec);
+      ctx.lineTo(x1, y1 - c);
+      ctx.quadraticCurveTo(x1, y1, x1 - c, y1);
+      ctx.lineTo(x0 + c, y1);
+      ctx.quadraticCurveTo(x0, y1, x0, y1 - c);
+      // Step out to left ILM retention shoulder
+      ctx.lineTo(x0, ey1 + ec);
+      ctx.lineTo(exL + ec, ey1 - 2);
+      ctx.quadraticCurveTo(exL, ey1 - 4, exL, ey1 - 4 - ec);
+      ctx.lineTo(exL, ey0 + 4 + ec);
+      ctx.quadraticCurveTo(exL, ey0 + 4, exL + ec, ey0 + 2);
+      ctx.lineTo(x0, ey0 - ec);
+      ctx.lineTo(x0, y0 + c);
+      ctx.quadraticCurveTo(x0, y0, x0 + c, y0);
+      ctx.closePath();
+    };
+
+    // Dark epoxy under-flange shadow
+    traceIHSPath(-2.2);
+    ctx.fillStyle = 'rgba(8, 12, 16, 0.85)';
+    ctx.fill();
+
+    // Stepped lower nickel IHS flange bevel
+    traceIHSPath(0);
+    const flangeGrad = ctx.createLinearGradient(ihsX - earW, ihsY, ihsX + ihsW + earW, ihsY + ihsH);
+    flangeGrad.addColorStop(0.0, '#c6cdd6');
+    flangeGrad.addColorStop(0.28, '#959ea9');
+    flangeGrad.addColorStop(0.55, '#dce2ea');
+    flangeGrad.addColorStop(0.82, '#7c8591');
+    flangeGrad.addColorStop(1.0, '#adb5bf');
+    ctx.fillStyle = flangeGrad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.lineWidth = 1.0;
+    ctx.stroke();
+
+    // 3. Raised brushed nickel-plated copper IHS top plateau
+    const topX = ihsX + 4.5;
+    const topY = ihsY + 4.5;
+    const topW = ihsW - 9;
+    const topH = ihsH - 9;
+    const ihsTopGrad = ctx.createLinearGradient(topX, topY, topX + topW, topY + topH);
+    ihsTopGrad.addColorStop(0.0, '#cfd6df');
+    ihsTopGrad.addColorStop(0.22, '#e8edf3');
+    ihsTopGrad.addColorStop(0.46, '#bcc4cf');
+    ihsTopGrad.addColorStop(0.72, '#d8dfe8');
+    ihsTopGrad.addColorStop(1.0, '#9fa8b4');
+
+    ctx.beginPath();
+    ctx.roundRect(topX, topY, topW, topH, 5);
+    ctx.fillStyle = ihsTopGrad;
+    ctx.fill();
+
+    // Fine directional brushed-nickel micro-grain across IHS top
+    ctx.save();
+    ctx.clip();
+    for (let gy = topY; gy < topY + topH; gy += 2) {
+      ctx.fillStyle = ((gy * 17) % 5 === 0) ? 'rgba(255,255,255,0.09)' : 'rgba(30,38,48,0.045)';
+      ctx.fillRect(topX, gy, topW, 1);
+    }
+    // Diagonal metallic specular sheen band
+    const sheen = ctx.createLinearGradient(topX, topY + topH * 0.15, topX + topW, topY + topH * 0.58);
+    sheen.addColorStop(0.0, 'rgba(255,255,255,0.0)');
+    sheen.addColorStop(0.45, 'rgba(255,255,255,0.22)');
+    sheen.addColorStop(0.55, 'rgba(255,255,255,0.08)');
+    sheen.addColorStop(1.0, 'rgba(255,255,255,0.0)');
+    ctx.fillStyle = sheen;
+    ctx.fillRect(topX, topY, topW, topH);
+    ctx.restore();
+
+    // Chamfered top-edge highlight & bottom-right bevel shadow
+    ctx.beginPath();
+    ctx.roundRect(topX, topY, topW, topH, 5);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.62)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Tiny authentic Intel IHS pressure-relief vent pinhole in upper-right corner
+    ctx.fillStyle = '#363d47';
+    ctx.beginPath();
+    ctx.arc(topX + topW - 8, topY + 8, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 4. Authentic Retail Laser-Etched Markings (dark slate-charcoal laser etch on nickel IHS)
+    const cx = topX + topW * 0.5;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(34, 40, 50, 0.88)';
+
+    // Modern lowercase geometric "intel" wordmark with crisp square dot over 'i'
+    ctx.font = '700 18px "Inter", "JetBrains Mono", sans-serif';
+    ctx.fillText('intel', cx, topY + topH * 0.19);
+    // Signature Intel cyan-blue dot accent subtle laser glint
+    ctx.fillStyle = 'rgba(28, 36, 48, 0.92)';
+    ctx.font = '700 11.5px "Inter", "JetBrains Mono", sans-serif';
+    ctx.fillText('CORE ULTRA', cx, topY + topH * 0.31);
+
+    // Model number: 9 285K
+    ctx.font = '800 16px "JetBrains Mono", monospace';
+    ctx.fillText('9 285K', cx, topY + topH * 0.44);
+
+    // Subtle hairline separator
+    ctx.fillStyle = 'rgba(42, 48, 58, 0.28)';
+    ctx.fillRect(topX + topW * 0.16, topY + topH * 0.495, topW * 0.68, 1);
+
+    // Authentic retail S-Spec (SRQD5), base clock (3.70GHZ), and socket/batch code
+    ctx.fillStyle = 'rgba(36, 42, 52, 0.84)';
+    ctx.font = '700 11px "JetBrains Mono", monospace';
+    ctx.fillText('SRQD5  3.70GHZ', cx, topY + topH * 0.60);
+    ctx.font = '600 9.5px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(42, 48, 58, 0.74)';
+    ctx.fillText('X442N819  LGA1851', cx, topY + topH * 0.70);
+
+    // 2D Laser-Etched Factory Data Matrix square in lower-left IHS + batch mark on lower-right
+    const dmSize = 18;
+    const dmX = topX + 10;
+    const dmY = topY + topH - dmSize - 9;
+    ctx.fillStyle = 'rgba(32, 38, 46, 0.86)';
+    // Solid L-finder edges (left & bottom) + deterministic data cells
+    ctx.fillRect(dmX, dmY, 2, dmSize);
+    ctx.fillRect(dmX, dmY + dmSize - 2, dmSize, 2);
+    const cell = 2;
+    for (let rIdx = 0; rIdx < 8; rIdx++) {
+      for (let cIdx = 0; cIdx < 8; cIdx++) {
+        if (rIdx === 7 || cIdx === 0) continue;
+        if (rIdx === 0 && cIdx % 2 === 1) continue;
+        if (cIdx === 7 && rIdx % 2 === 0) continue;
+        const hash = ((rIdx * 13 + cIdx * 7 + rIdx * cIdx * 3) % 5);
+        if (hash < 2 || (rIdx === 0 && cIdx % 2 === 0) || (cIdx === 7 && rIdx % 2 === 1)) {
+          ctx.fillRect(dmX + cIdx * cell, dmY + rIdx * cell, cell, cell);
+        }
+      }
+    }
+
+    // Small etched "e1" RoHS / Arrow Lake die code on lower-right IHS
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(38, 45, 55, 0.72)';
+    ctx.font = '700 9.5px "JetBrains Mono", monospace';
+    ctx.fillText('ARL-S', topX + topW - 9, dmY + 8);
+    ctx.fillText('24C/24T', topX + topW - 9, dmY + 18);
+
+    ctx.textAlign = 'left';
     ctx.restore();
   }
 
@@ -424,7 +714,7 @@ export class OmarchyScreen {
     const botTileY = topY + topTileH + gap;
     const botTileH = availH - topTileH - gap;
 
-    // Tile 1: Crisp High-Contrast Omarchy `fastfetch`
+    // Tile 1: Crisp High-Contrast Omarchy `fastfetch` with Photorealistic Intel Core Ultra 9 285K (LGA 1851)
     ctx.save();
     ctx.fillStyle = 'rgba(26, 27, 38, 0.90)';
     ctx.beginPath();
@@ -436,57 +726,62 @@ export class OmarchyScreen {
 
     ctx.fillStyle = TN.cyan;
     ctx.font = '700 18px "JetBrains Mono", monospace';
-    ctx.fillText('❯ fastfetch', rightX + 22, topY + 34);
+    ctx.fillText('❯ fastfetch --cpu-die', rightX + 20, topY + 32);
 
-    const archArt = [
-      '      /\\      ',
-      '     /  \\     ',
-      '    /\\   \\    ',
-      '   /  ..  \\   ',
-      '  /  \'  \'  \\  ',
-      ' /_.\'    \'._\\ ',
-    ];
-    ctx.fillStyle = TN.blue;
-    ctx.font = '700 15px "JetBrains Mono", monospace';
-    archArt.forEach((ln, idx) => {
-      ctx.fillText(ln, rightX + 16, topY + 70 + idx * 20);
-    });
+    // Photorealistic Intel Core Ultra 9 285K LGA 1851 processor (accurate 37.5 x 45.0 mm = 1 : 1.20 shape & laser markings!)
+    const chipW = 148;
+    const chipH = 178;
+    this._drawRealisticCPUChip(ctx, rightX + 18, topY + 50, chipW, chipH);
 
-    ctx.fillStyle = TN.purple;
-    ctx.font = '700 20px "JetBrains Mono", monospace';
-    ctx.fillText('omarchy@workstation', rightX + 164, topY + 76);
+    // Subtle socket & die badge caption directly below the CPU package
     ctx.fillStyle = TN.comment;
-    ctx.font = '500 15px "JetBrains Mono", monospace';
-    ctx.fillText('──────────────────────', rightX + 164, topY + 96);
+    ctx.font = '600 12.5px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('LGA 1851 · 8P+16E', rightX + 18 + chipW / 2, topY + 246);
+    ctx.textAlign = 'left';
+
+    const infoX = rightX + 182;
+    ctx.fillStyle = TN.purple;
+    ctx.font = '700 19px "JetBrains Mono", monospace';
+    ctx.fillText('omarchy@workstation', infoX, topY + 68);
+    ctx.fillStyle = TN.comment;
+    ctx.font = '500 14px "JetBrains Mono", monospace';
+    ctx.fillText('─────────────────────────', infoX, topY + 86);
     ctx.fillStyle = TN.teal;
-    ctx.font = '700 16px "JetBrains Mono", monospace';
-    ctx.fillText('Arch Linux · Hyprland 0.48', rightX + 164, topY + 122);
+    ctx.font = '700 15.5px "JetBrains Mono", monospace';
+    ctx.fillText('Arch Linux · Hyprland 0.48', infoX, topY + 110);
     ctx.fillStyle = TN.fgBright;
-    ctx.fillText('Theme: Tokyo Night · Ghostty', rightX + 164, topY + 146);
+    ctx.fillText('Kernel: 6.14.2-arch1-1', infoX, topY + 133);
+    ctx.fillStyle = TN.blue;
+    ctx.fillText('Board:  MSI PRO Z890-P WIFI', infoX, topY + 156);
     ctx.fillStyle = TN.green;
-    ctx.fillText('Kernel: 6.14.2-arch1-1', rightX + 164, topY + 170);
+    ctx.fillText('Cooler: TITAN 360 RX RGB', infoX, topY + 179);
+    ctx.fillStyle = TN.amber;
+    ctx.fillText('Clock:  5.42 / 5.70 GHz · 44°C', infoX, topY + 202);
+    ctx.fillStyle = TN.cyan;
+    ctx.fillText('Cache:  36 MB L3 · 40 MB L2', infoX, topY + 225);
 
     const specs = [
-      ['CPU', 'Intel Core Ultra 9 285K · 96GB'],
-      ['GPU', 'NVIDIA RTX 5090 FE 32GB'],
-      ['NODES', '6× DGX Spark + 2× GX10'],
-      ['FABRIC', 'MikroTik CRS804 400G'],
+      ['CPU', 'Intel Core Ultra 9 285K (24) @ 5.70GHz'],
+      ['GPU', 'NVIDIA GeForce RTX 5090 FE [32 GiB]'],
+      ['MEM', '18.4 / 96.0 GiB DDR5-6400 (19%)'],
+      ['NET', '6× DGX Spark + 2× GX10 · CRS804 400G'],
     ];
-    let sy = topY + 230;
+    let sy = topY + 276;
     for (const [k, v] of specs) {
       ctx.fillStyle = TN.blue;
-      ctx.font = '700 17px "JetBrains Mono", monospace';
-      ctx.fillText(k.padEnd(7, ' '), rightX + 20, sy);
+      ctx.font = '700 15.5px "JetBrains Mono", monospace';
+      ctx.fillText(k.padEnd(5, ' '), rightX + 20, sy);
       ctx.fillStyle = TN.fgBright;
-      ctx.font = '600 17px "JetBrains Mono", monospace';
-      ctx.fillText(v, rightX + 112, sy);
-      sy += 33;
+      ctx.font = '600 15.5px "JetBrains Mono", monospace';
+      ctx.fillText(v, rightX + 82, sy);
+      sy += 27;
     }
 
     const swatches = [TN.red, TN.green, TN.amber, TN.blue, TN.purple, TN.cyan, TN.teal, TN.fg];
     swatches.forEach((col, i) => {
       ctx.fillStyle = col;
-      ctx.fillRect(rightX + 24 + i * 44, topY + topTileH - 36, 36, 16);
+      ctx.fillRect(rightX + 20 + i * 40, topY + topTileH - 28, 32, 13);
     });
     ctx.restore();
 
@@ -505,34 +800,84 @@ export class OmarchyScreen {
 
     ctx.fillStyle = TN.purple;
     ctx.font = '700 16px "JetBrains Mono", monospace';
-    ctx.fillText('┌─ btop++ · system, 400G fabric & procs ──────────', bx, botTileY + 28);
+    ctx.fillText('┌─ btop++ · Core Ultra 9 285K & 400G fabric ──────', bx, botTileY + 28);
 
-    // 1. CPU & GPU Wave Graph
+    // 1. Authentic `btop++` Intel Core Ultra 9 285K CPU Box (Braille-style time-series curve + P/E core meters!)
     const cpuY = botTileY + 42;
-    const cpuH = 114;
+    const cpuH = 124;
     ctx.strokeStyle = TN.blue;
     ctx.lineWidth = 1.5;
     ctx.strokeRect(bx, cpuY, bw, cpuH);
     ctx.fillStyle = TN.bgDark;
-    ctx.fillRect(bx + 10, cpuY - 10, 315, 18);
+    ctx.fillRect(bx + 10, cpuY - 10, 468, 18);
     ctx.fillStyle = TN.cyan;
-    ctx.font = '700 15px "JetBrains Mono", monospace';
-    ctx.fillText('CPU 14.2% · RTX 5090 36°C · 42W', bx + 16, cpuY + 4);
+    ctx.font = '700 14.5px "JetBrains Mono", monospace';
+    const liveCpuPct = (13.4 + Math.sin(elapsed * 0.7) * 2.1 + Math.cos(elapsed * 1.3) * 1.2).toFixed(1);
+    const liveTemp = Math.round(43 + Math.sin(elapsed * 0.4) * 2);
+    ctx.fillText(`cpu │ Core Ultra 9 285K · ${liveCpuPct}% · 5.42 GHz · ${liveTemp}°C`, bx + 16, cpuY + 4);
 
-    const bars = 36;
-    const barStep = (bw - 24) / bars;
-    for (let i = 0; i < bars; i++) {
-      const h1 = 14 + Math.abs(Math.sin(elapsed * 1.6 + i * 0.38)) * 52;
-      const h2 = 8 + Math.abs(Math.cos(elapsed * 1.1 + i * 0.27)) * 30;
-      ctx.fillStyle = 'rgba(122, 162, 247, 0.80)';
-      ctx.fillRect(bx + 12 + i * barStep, cpuY + cpuH - 10 - h1, barStep - 4, h1);
-      ctx.fillStyle = 'rgba(115, 218, 202, 0.74)';
-      ctx.fillRect(bx + 12 + i * barStep, cpuY + cpuH - 10 - h2, barStep - 4, h2);
+    // Left 56%: Realistic btop++ braille-dot CPU history curve with subtle gridlines & thermal gradient
+    const gX = bx + 12;
+    const gY = cpuY + 18;
+    const gW = Math.floor(bw * 0.54);
+    const gH = cpuH - 28;
+    ctx.strokeStyle = 'rgba(86, 95, 137, 0.25)';
+    ctx.lineWidth = 1;
+    for (let gl = 0; gl <= 2; gl++) {
+      const ly = gY + (gH * gl) / 2;
+      ctx.beginPath();
+      ctx.moveTo(gX, ly);
+      ctx.lineTo(gX + gW, ly);
+      ctx.stroke();
+    }
+    const cols = 44;
+    const colW = gW / cols;
+    for (let i = 0; i < cols; i++) {
+      const t = elapsed * 0.85 - (cols - 1 - i) * 0.18;
+      const load = 0.16 + 0.14 * Math.sin(t * 1.1) * Math.sin(t * 0.37) + 0.08 * Math.sin(t * 2.7 + i * 0.2) + (i % 7 === 0 ? 0.10 : 0);
+      const val = Math.max(0.05, Math.min(0.88, load));
+      const dots = Math.max(1, Math.round(val * 12));
+      for (let d = 0; d < dots; d++) {
+        const frac = d / 11;
+        ctx.fillStyle = frac > 0.65 ? TN.amber : frac > 0.35 ? TN.teal : TN.blue;
+        const dx = gX + i * colW + 1;
+        const dy = gY + gH - (d + 1) * (gH / 12) + 1;
+        ctx.fillRect(dx, dy, Math.max(2, colW - 2.5), Math.max(2, gH / 12 - 2));
+      }
     }
 
+    // Right 44%: Compact per-core telemetry (P0–P7 Lion Cove P-cores + E8–E23 Skymont E-cores + pkg power)
+    const cX = gX + gW + 14;
+    const cW = bx + bw - cX - 10;
+    const coreRows = [
+      ['P0-3', 0.24 + Math.abs(Math.sin(elapsed * 0.9)) * 0.14, TN.cyan],
+      ['P4-7', 0.18 + Math.abs(Math.cos(elapsed * 0.7 + 1)) * 0.12, TN.blue],
+      ['E8-15', 0.11 + Math.abs(Math.sin(elapsed * 0.5 + 2)) * 0.08, TN.teal],
+      ['E16-23', 0.08 + Math.abs(Math.cos(elapsed * 0.6 + 3)) * 0.06, TN.green],
+    ];
+    coreRows.forEach(([lbl, pct, col], idx) => {
+      const ry = cpuY + 26 + idx * 20;
+      ctx.fillStyle = TN.fg;
+      ctx.font = '600 13px "JetBrains Mono", monospace';
+      ctx.fillText(lbl.padEnd(6, ' '), cX, ry);
+      const mbX = cX + 56;
+      const mbW = Math.max(40, cW - 102);
+      ctx.fillStyle = '#24283b';
+      ctx.fillRect(mbX, ry - 10, mbW, 10);
+      ctx.fillStyle = col;
+      ctx.fillRect(mbX, ry - 10, Math.max(4, mbW * pct), 10);
+      ctx.fillStyle = TN.fgBright;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.round(pct * 100)}%`, cX + cW, ry);
+      ctx.textAlign = 'left';
+    });
+    ctx.fillStyle = TN.comment;
+    ctx.font = '600 12.5px "JetBrains Mono", monospace';
+    ctx.fillText('PKG 48W · RTX 5090 36°C 42W', cX, cpuY + cpuH - 8);
+
     // 2. Memory, VRAM & 8x DGX Spark Cluster Fabric
-    const memY = cpuY + cpuH + 16;
-    const memH = 122;
+    const memY = cpuY + cpuH + 14;
+    const memH = 114;
     ctx.strokeStyle = TN.purple;
     ctx.strokeRect(bx, memY, bw, memH);
     ctx.fillStyle = TN.bgDark;
