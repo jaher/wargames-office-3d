@@ -129,8 +129,21 @@ export class SolutionsController {
     this.activeSecrets = [];
     this._gameFetchPromises = new Map();
     this._selectTok = 0;
+    this._cancelled = false;
+    this._abortController = new AbortController();
 
     this._bindEvents();
+  }
+
+  cancelLoading() {
+    this._cancelled = true;
+    ++this.runId;
+    ++this.narrLoadTok;
+    try {
+      this._abortController.abort();
+    } catch { /* ignore */ }
+    this.narrAudio.pause();
+    this.narrAudio.removeAttribute('src');
   }
 
   _bindEvents() {
@@ -428,10 +441,12 @@ export class SolutionsController {
       _loaded: false,
     };
 
+    const sig = this._abortController.signal;
     const [manifestRes, vortexRes] = await Promise.all([
-      fetch(versionedUrl(`${SUBMODULE_BASE}/games/manifest.json`)).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(versionedUrl(`${SUBMODULE_BASE}/games/vortex.json`)).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(versionedUrl(`${SUBMODULE_BASE}/games/manifest.json`), { signal: sig }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(versionedUrl(`${SUBMODULE_BASE}/games/vortex.json`), { signal: sig }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
+    if (this._cancelled) return;
 
     if (manifestRes && Array.isArray(manifestRes.games)) {
       for (const g of manifestRes.games) {
@@ -496,14 +511,18 @@ export class SolutionsController {
     // compete with 3D GLB models and skyline textures on initial page load.
     const allKeys = Object.keys(this.games).filter((k) => !this.games[k]._loaded);
     setTimeout(async () => {
+      if (this._cancelled) return;
       for (let i = 0; i < allKeys.length; i += 3) {
+        if (this._cancelled) return;
         await Promise.all(allKeys.slice(i, i + 3).map((k) => this._ensureGameLoaded(k)));
+        if (this._cancelled) return;
         this._refreshGameOptionLabels();
       }
     }, 400);
   }
 
   startInitialPlayback() {
+    if (this._cancelled) return;
     if (!this.userPickedGame) {
       void this.playLevel(0);
     }

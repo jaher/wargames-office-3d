@@ -8,9 +8,12 @@ function getDom() {
     app: byId('app'),
     canvas: byId('sceneCanvas'),
     loadingOverlay: byId('loadingOverlay'),
+    loadingTitle: byId('loadingTitle'),
     loadingStatus: byId('loadingStatus'),
     loadingBarFill: byId('loadingBarFill'),
     loadingCount: byId('loadingCount'),
+    cancelLoadBtn: byId('cancelLoadBtn'),
+    retryLoadBtn: byId('retryLoadBtn'),
     hudNowPlaying: byId('hudNowPlaying'),
     jetAudioBtn: byId('jetAudioBtn'),
     skyMoodBtn: byId('skyMoodBtn'),
@@ -46,11 +49,13 @@ function setActiveCamButton(camButtons, preset) {
 
 function hideLoadingOverlay(dom) {
   window.__officeReady = true;
+  if (dom.canvas) dom.canvas.classList.add('ready');
   if (!dom.loadingOverlay) return;
   dom.loadingOverlay.classList.add('hidden');
 }
 
 function bootstrap() {
+  if (window.__loadCancelled) return;
   const dom = getDom();
   const omarchyScreen = new OmarchyScreen();
   window.__omarchyScreen = omarchyScreen;
@@ -110,8 +115,12 @@ function bootstrap() {
     dom.loadingStatus.textContent = 'Loading 3D models, skyline vistas & narration…';
   } catch (err) {
     console.error('3D scene initialization failed:', err);
-    dom.loadingStatus.textContent = `WebGL error: ${err?.message || err}`;
-    setTimeout(() => hideLoadingOverlay(dom), 2600);
+    if (dom.loadingTitle) dom.loadingTitle.textContent = 'WebGL Initialization Failed';
+    if (dom.loadingStatus) dom.loadingStatus.textContent = `WebGL error: ${err?.message || err}`;
+    if (dom.loadingOverlay) dom.loadingOverlay.classList.add('cancelled');
+    if (dom.cancelLoadBtn) dom.cancelLoadBtn.style.display = 'none';
+    if (dom.retryLoadBtn) dom.retryLoadBtn.style.display = '';
+    return;
   }
 
   // Camera preset buttons
@@ -226,7 +235,33 @@ function bootstrap() {
   let sceneDone = 0;
   let sceneTotal = 1;
   let solutionsReady = false;
+  let loadCancelled = Boolean(window.__loadCancelled);
+
+  const showLoadStoppedState = (titleText, statusText) => {
+    if (dom.loadingOverlay) dom.loadingOverlay.classList.add('cancelled');
+    if (dom.loadingTitle) dom.loadingTitle.textContent = titleText;
+    if (dom.loadingStatus) dom.loadingStatus.textContent = statusText;
+    if (dom.cancelLoadBtn) dom.cancelLoadBtn.style.display = 'none';
+    if (dom.retryLoadBtn) dom.retryLoadBtn.style.display = '';
+  };
+
+  const cancelLoad = () => {
+    if (window.__officeReady || loadCancelled) return;
+    loadCancelled = true;
+    window.__loadCancelled = true;
+    if (office) office.cancelLoading();
+    solutions.cancelLoading();
+    const doneSteps = sceneDone + (solutionsReady ? 1 : 0);
+    const totalSteps = Math.max(1, sceneTotal + 1);
+    showLoadStoppedState(
+      'Loading Cancelled',
+      `Cancelled at ${doneSteps} / ${totalSteps} assets. Click Retry Load to try again.`
+    );
+  };
+  window.__cancelLoad = cancelLoad;
+
   const updatePreamble = (lastUrl = '') => {
+    if (loadCancelled) return;
     const doneSteps = sceneDone + (solutionsReady ? 1 : 0);
     const totalSteps = Math.max(1, sceneTotal + 1);
     const pct = Math.min(100, Math.round((doneSteps / totalSteps) * 100));
@@ -244,15 +279,17 @@ function bootstrap() {
         sceneTotal = Math.max(1, total);
         updatePreamble(lastUrl);
       })
-    : Promise.resolve();
+    : Promise.resolve({ failed: [], pending: 0, cancelled: false });
 
   const solutionsReadyP = solutions
     .init({ deferPlayback: true })
     .then(() => {
+      if (loadCancelled) return;
       solutionsReady = true;
       updatePreamble();
     })
     .catch((err) => {
+      if (loadCancelled || err?.name === 'AbortError') return;
       console.error('Failed to load OverTheWire solutions:', err);
       dom.hudNowPlaying.textContent = 'Solutions unavailable';
       dom.statusBadge.textContent = 'Offline';
@@ -260,12 +297,22 @@ function bootstrap() {
       updatePreamble();
     });
 
-  // Safety failsafe (12s) so a slow or interrupted network can never trap the loading preamble
-  const failsafeP = new Promise((resolve) => setTimeout(resolve, 12000));
-  Promise.race([Promise.all([sceneReadyP, solutionsReadyP]), failsafeP]).then(() => {
+  // Strict all-assets-ready gate: NEVER reveal a partial scene or pop in assets after the fact.
+  // The user can cancel at any time via the Cancel Load button or Escape key.
+  Promise.all([sceneReadyP, solutionsReadyP]).then(([assetStats]) => {
+    if (loadCancelled || window.__loadCancelled || assetStats?.cancelled) return;
+    const failed = assetStats?.failed || [];
+    if (failed.length > 0 || (assetStats?.pending || 0) > 0) {
+      showLoadStoppedState(
+        'Some Assets Failed to Load',
+        `Could not load ${failed.length} required asset(s). Click Retry Load to try again.`
+      );
+      return;
+    }
     if (dom.loadingBarFill) dom.loadingBarFill.style.width = '100%';
     if (dom.loadingCount) dom.loadingCount.textContent = '100%';
-    if (dom.loadingStatus) dom.loadingStatus.textContent = 'Ready';
+    if (dom.loadingStatus) dom.loadingStatus.textContent = 'Rendering complete scene…';
+    if (dom.cancelLoadBtn) dom.cancelLoadBtn.disabled = true;
     try {
       solutions.startInitialPlayback();
     } catch (e) {
@@ -275,12 +322,11 @@ function bootstrap() {
       if (office) {
         office.renderFrame();
         office.start();
-        setTimeout(() => office.preloadSecondarySkylines(), 150);
       }
+      hideLoadingOverlay(dom);
     } catch (e) {
       console.error('3D start error:', e);
-    } finally {
-      hideLoadingOverlay(dom);
+      showLoadStoppedState('Render Error', `3D render error: ${e?.message || e}`);
     }
   });
 }

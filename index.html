@@ -4,23 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta name="asset-version" content="7a65140197">
+  <meta name="asset-version" content="6fdcc3e523">
   <title>Wargames Office 3D — OverTheWire Solutions</title>
   <meta name="description" content="Interactive 3D office with an Omarchy Linux workstation, Corsair RTX 5090 rig, 8x DGX Spark cluster, and live narrated OverTheWire wargame solutions.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231a1b26'/><path d='M16 6L26 26H21L16 15L11 26H6Z' fill='%237aa2f7'/></svg>">
-  <script>window.__ASSET_VERSION__ = '7a65140197';</script>
+  <script>window.__ASSET_VERSION__ = '6fdcc3e523';</script>
   <script type="importmap">
     {
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-        "./js/assetUrl.js": "./js/assetUrl.js?v=7a65140197",
-        "./js/blueAngelsAudio.js": "./js/blueAngelsAudio.js?v=7a65140197",
-        "./js/blueAngelsShow.js": "./js/blueAngelsShow.js?v=7a65140197",
-        "./js/main.js": "./js/main.js?v=7a65140197",
-        "./js/officeScene.js": "./js/officeScene.js?v=7a65140197",
-        "./js/omarchyScreen.js": "./js/omarchyScreen.js?v=7a65140197",
-        "./js/solutions.js": "./js/solutions.js?v=7a65140197"
+        "./js/assetUrl.js": "./js/assetUrl.js?v=6fdcc3e523",
+        "./js/blueAngelsAudio.js": "./js/blueAngelsAudio.js?v=6fdcc3e523",
+        "./js/blueAngelsShow.js": "./js/blueAngelsShow.js?v=6fdcc3e523",
+        "./js/main.js": "./js/main.js?v=6fdcc3e523",
+        "./js/officeScene.js": "./js/officeScene.js?v=6fdcc3e523",
+        "./js/omarchyScreen.js": "./js/omarchyScreen.js?v=6fdcc3e523",
+        "./js/solutions.js": "./js/solutions.js?v=6fdcc3e523"
       }
     }
   </script>
@@ -29,15 +29,15 @@
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/OrbitControls.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/geometries/RoundedBoxGeometry.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js">
-  <link rel="modulepreload" href="js/assetUrl.js?v=7a65140197">
-  <link rel="modulepreload" href="js/blueAngelsAudio.js?v=7a65140197">
-  <link rel="modulepreload" href="js/blueAngelsShow.js?v=7a65140197">
-  <link rel="modulepreload" href="js/main.js?v=7a65140197">
-  <link rel="modulepreload" href="js/officeScene.js?v=7a65140197">
-  <link rel="modulepreload" href="js/omarchyScreen.js?v=7a65140197">
-  <link rel="modulepreload" href="js/solutions.js?v=7a65140197">
-  <link rel="preload" as="image" href="assets/textures/skyline_golden.jpg?v=7a65140197">
-  <link rel="stylesheet" href="css/style.css?v=7a65140197">
+  <link rel="modulepreload" href="js/assetUrl.js?v=6fdcc3e523">
+  <link rel="modulepreload" href="js/blueAngelsAudio.js?v=6fdcc3e523">
+  <link rel="modulepreload" href="js/blueAngelsShow.js?v=6fdcc3e523">
+  <link rel="modulepreload" href="js/main.js?v=6fdcc3e523">
+  <link rel="modulepreload" href="js/officeScene.js?v=6fdcc3e523">
+  <link rel="modulepreload" href="js/omarchyScreen.js?v=6fdcc3e523">
+  <link rel="modulepreload" href="js/solutions.js?v=6fdcc3e523">
+  <link rel="preload" as="image" href="assets/textures/skyline_golden.jpg?v=6fdcc3e523">
+  <link rel="stylesheet" href="css/style.css?v=6fdcc3e523">
 </head>
 <body>
   <div id="app" class="app">
@@ -46,15 +46,52 @@
 
       <div id="loadingOverlay" class="loading-overlay">
         <div class="loading-card">
-          <div class="loading-spinner"></div>
-          <div class="loading-title">Loading Wargames Office 3D</div>
+          <div id="loadingSpinner" class="loading-spinner"></div>
+          <div id="loadingTitle" class="loading-title">Loading Wargames Office 3D</div>
           <div id="loadingStatus" class="loading-sub">Loading 3D models, skyline vistas &amp; solutions…</div>
           <div class="loading-bar-track" aria-hidden="true">
             <div id="loadingBarFill" class="loading-bar-fill"></div>
           </div>
           <div id="loadingCount" class="loading-count">0%</div>
+          <div class="loading-actions">
+            <button id="cancelLoadBtn" class="loading-btn loading-btn-cancel" type="button" title="Cancel loading (Esc)">Cancel Load</button>
+            <button id="retryLoadBtn" class="loading-btn loading-btn-retry" type="button" style="display:none">Retry Load</button>
+          </div>
         </div>
       </div>
+      <script>
+        // Wire Cancel/Retry/Esc immediately as #loadingOverlay enters the DOM so cancellation works from millisecond 0
+        (function () {
+          window.__showLoadStopped = function (titleText, statusText) {
+            var ov = document.getElementById('loadingOverlay');
+            var title = document.getElementById('loadingTitle');
+            var status = document.getElementById('loadingStatus');
+            var cancel = document.getElementById('cancelLoadBtn');
+            var retry = document.getElementById('retryLoadBtn');
+            if (ov) ov.classList.add('cancelled');
+            if (title && titleText) title.textContent = titleText;
+            if (status && statusText) status.textContent = statusText;
+            if (cancel) cancel.style.display = 'none';
+            if (retry) retry.style.display = '';
+          };
+          var onCancel = function () {
+            if (window.__officeReady || window.__loadCancelled) return;
+            if (typeof window.__cancelLoad === 'function') {
+              window.__cancelLoad();
+              return;
+            }
+            window.__loadCancelled = true;
+            window.__showLoadStopped('Loading Cancelled', 'Loading cancelled before startup completed. Click Retry Load to try again.');
+          };
+          var cBtn = document.getElementById('cancelLoadBtn');
+          var rBtn = document.getElementById('retryLoadBtn');
+          if (cBtn) cBtn.addEventListener('click', onCancel);
+          if (rBtn) rBtn.addEventListener('click', function () { window.location.reload(); });
+          window.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !window.__officeReady && !window.__loadCancelled) onCancel();
+          });
+        })();
+      </script>
 
       <header class="hud-top">
         <div class="brand-pill">
@@ -161,38 +198,22 @@
   </div>
 
   <script>
-    // Failsafe boot watchdog: surfaces any module/WebGL load error instead of spinning forever
+    // Boot error watchdog: surfaces any module/WebGL load error cleanly with Retry Load
     (function () {
-      var showErr = function (msg) {
-        var el = document.getElementById('loadingStatus');
-        if (el) el.textContent = msg;
-      };
       window.addEventListener('error', function (e) {
-        if (!window.__officeReady) {
-          showErr('Load error: ' + (e.message || 'Failed to load 3D modules'));
+        if (!window.__officeReady && !window.__loadCancelled && window.__showLoadStopped) {
+          window.__showLoadStopped('Load Error', 'Load error: ' + (e.message || 'Failed to load 3D modules'));
         }
       });
       window.addEventListener('unhandledrejection', function (e) {
-        if (!window.__officeReady) {
+        if (!window.__officeReady && !window.__loadCancelled && window.__showLoadStopped) {
           var reason = e.reason && (e.reason.message || String(e.reason));
-          showErr('Startup error: ' + (reason || 'Module load failed'));
+          if (reason && reason.indexOf('AbortError') !== -1) return;
+          window.__showLoadStopped('Startup Error', 'Startup error: ' + (reason || 'Module load failed'));
         }
       });
-      setTimeout(function () {
-        if (!window.__officeReady) {
-          var ov = document.getElementById('loadingOverlay');
-          var el = document.getElementById('loadingStatus');
-          if (el && el.textContent.indexOf('error') === -1) {
-            el.textContent = '3D modules are taking longer than expected — click here to dismiss overlay.';
-          }
-          if (ov) {
-            ov.style.cursor = 'pointer';
-            ov.addEventListener('click', function () { ov.classList.add('hidden'); }, { once: true });
-          }
-        }
-      }, 10000);
     })();
   </script>
-  <script type="module" src="js/main.js?v=7a65140197"></script>
+  <script type="module" src="js/main.js?v=6fdcc3e523"></script>
 </body>
 </html>

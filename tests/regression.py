@@ -235,15 +235,18 @@ def test_live_scene_window_and_assets(port):
         # Loading preamble MUST have kept the overlay visible until ALL assets, solutions & narration finished!
         preamble = cdp.eval("""(() => ({
             overlayHidden: document.getElementById('loadingOverlay').classList.contains('hidden'),
+            canvasReady: document.getElementById('sceneCanvas').classList.contains('ready'),
+            hasCancelBtn: Boolean(document.getElementById('cancelLoadBtn')),
             stats: window.__assetStats,
             jumpCount: document.getElementById('jump').options.length,
             transcriptCount: document.getElementById('narrTranscript').children.length,
         }))()""")
         stats = preamble["stats"]
-        assert preamble["overlayHidden"], f"Overlay still visible after __officeReady: {preamble}"
+        assert preamble["overlayHidden"] and preamble["canvasReady"], f"Overlay/canvas state invalid after __officeReady: {preamble}"
+        assert preamble["hasCancelBtn"], "Missing #cancelLoadBtn on loading overlay"
         assert stats["pending"] == 0, f"Revealed scene while assets still pending: {stats}"
         assert len(stats["failed"]) == 0, f"Failed 3D assets: {stats['failed']}"
-        assert len(stats["loaded"]) >= 25, f"Too few assets loaded: {len(stats['loaded'])}"
+        assert len(stats["loaded"]) >= 27, f"All 27 assets must load upfront before reveal, got: {len(stats['loaded'])}"
         assert cdp.eval("Boolean(window.__blueAngelsActive)"), "Blue Angels airshow did not initialize"
         # Exhaustively verify 100% smooth, continuous Blue Angels trajectories across the full closed cycle
         # (ZERO teleports, jumps, orientation flips, or window/cyclorama clipping!) + live Web Audio engine
@@ -333,7 +336,27 @@ def test_live_scene_window_and_assets(port):
         ]
         unversioned = [p for p in local_reqs if f"v={asset_ver}" not in p]
         assert local_reqs and not unversioned, f"Unversioned asset requests detected (expected v={asset_ver}): {unversioned}"
-        print(f"      PASS ({len(stats['loaded'])} assets loaded, 0 failed, {len(local_reqs)} versioned reqs v={asset_ver}, 3 window moods rich & distinct)")
+
+        # Verify mid-load cancellation aborts loading cleanly & never reveals a partial scene!
+        cdp.call("Page.enable")
+        cdp.call("Page.navigate", {"url": f"http://127.0.0.1:{port}/?panel=0"})
+        assert wait_for(cdp, "Boolean(document.getElementById('cancelLoadBtn'))", 8.0), "Cancel button did not appear during reload"
+        cdp.eval("document.getElementById('cancelLoadBtn').click()")
+        time.sleep(0.8)
+        cancel_st = cdp.eval("""(() => ({
+            cancelled: Boolean(window.__loadCancelled),
+            ready: Boolean(window.__officeReady),
+            overlayHidden: document.getElementById('loadingOverlay').classList.contains('hidden'),
+            overlayCancelled: document.getElementById('loadingOverlay').classList.contains('cancelled'),
+            canvasReady: document.getElementById('sceneCanvas').classList.contains('ready'),
+            retryVisible: getComputedStyle(document.getElementById('retryLoadBtn')).display !== 'none',
+            cancelHidden: getComputedStyle(document.getElementById('cancelLoadBtn')).display === 'none',
+            title: document.getElementById('loadingTitle')?.textContent || '',
+        }))()""")
+        assert cancel_st["cancelled"] and not cancel_st["ready"], f"Load cancel did not stop startup: {cancel_st}"
+        assert not cancel_st["overlayHidden"] and cancel_st["overlayCancelled"] and not cancel_st["canvasReady"], f"Partial scene revealed after cancel: {cancel_st}"
+        assert cancel_st["retryVisible"] and cancel_st["cancelHidden"], f"Retry/Cancel button state wrong after cancel: {cancel_st}"
+        print(f"      PASS ({len(stats['loaded'])} assets loaded upfront, cancel/abort verified, 0 failed, {len(local_reqs)} versioned reqs v={asset_ver}, 3 window moods rich & distinct)")
     finally:
         cdp.close()
         proc.terminate()

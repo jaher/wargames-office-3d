@@ -930,7 +930,11 @@ export class OfficeScene {
     this._glbQueue = [];
     this._glbInFlight = 0;
     this._glbMaxConcurrent = 10;
-    this._assetStats = { total: 0, loaded: [], failed: [], pending: 0 };
+    this._cancelled = false;
+    this._abortController = new AbortController();
+    this._activeTimers = new Set();
+    this._activeImages = new Set();
+    this._assetStats = { total: 0, loaded: [], failed: [], pending: 0, cancelled: false };
     this._assetProgressCbs = [];
     this._assetReadyResolvers = [];
     if (typeof window !== 'undefined') {
@@ -1033,9 +1037,88 @@ export class OfficeScene {
     });
   }
 
+  _scheduleTimer(fn, ms) {
+    const id = setTimeout(() => {
+      this._activeTimers.delete(id);
+      if (!this._cancelled) fn();
+    }, ms);
+    this._activeTimers.add(id);
+    return id;
+  }
+
+  _clearTimer(id) {
+    clearTimeout(id);
+    this._activeTimers.delete(id);
+  }
+
+  cancelLoading() {
+    if (this._cancelled) return;
+    this._cancelled = true;
+    this._assetStats.cancelled = true;
+    this._glbQueue.length = 0;
+    this._glbInFlight = 0;
+    try {
+      this._abortController.abort();
+    } catch { /* ignore */ }
+    for (const id of this._activeTimers) {
+      clearTimeout(id);
+    }
+    this._activeTimers.clear();
+    for (const img of this._activeImages) {
+      try {
+        img.onload = null;
+        img.onerror = null;
+        img.src = '';
+      } catch { /* ignore */ }
+    }
+    this._activeImages.clear();
+    if (this._rafId) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
+    if (this._assetReadyResolvers.length > 0) {
+      const resolvers = this._assetReadyResolvers.splice(0);
+      for (const r of resolvers) r(this._assetStats);
+    }
+  }
+
+  _fetchTextureAbortable(reqUrl, onLoad, onFail) {
+    const signal = this._abortController.signal;
+    fetch(reqUrl, { signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status} for ${reqUrl}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        if (this._cancelled) return;
+        const objUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        this._activeImages.add(img);
+        img.onload = () => {
+          this._activeImages.delete(img);
+          URL.revokeObjectURL(objUrl);
+          if (this._cancelled) return;
+          const loadedTex = new THREE.Texture(img);
+          loadedTex.needsUpdate = true;
+          onLoad(loadedTex);
+        };
+        img.onerror = (err) => {
+          this._activeImages.delete(img);
+          URL.revokeObjectURL(objUrl);
+          if (!this._cancelled) onFail(err);
+        };
+        img.src = objUrl;
+      })
+      .catch((err) => {
+        if (this._cancelled || err?.name === 'AbortError') return;
+        onFail(err);
+      });
+  }
+
   // Helper to load a real-world Blender .glb model cleanly with bounded concurrency,
-  // automatic retries on transient HTTP/2 or network hiccups, shadow setup & crisp metallic IBL.
+  // real AbortController cancellation, automatic retries on transient hiccups, shadow setup & crisp metallic IBL.
   _loadGLB(url, onLoaded, retries = 3) {
+    if (this._cancelled) return;
     this._assetStats.total++;
     this._assetStats.pending++;
     this._glbQueue.push({ url, onLoaded, retries, attempt: 0 });
@@ -1043,21 +1126,21 @@ export class OfficeScene {
   }
 
   _drainGLBQueue() {
-    while (this._glbInFlight < this._glbMaxConcurrent && this._glbQueue.length > 0) {
+    while (!this._cancelled && this._glbInFlight < this._glbMaxConcurrent && this._glbQueue.length > 0) {
       const job = this._glbQueue.shift();
       this._glbInFlight++;
       const reqUrl = versionedUrl(job.url, job.attempt > 0 ? { retry: job.attempt } : null);
       const isEnclosedPC = job.url.includes('corsair_rtx5090');
       let settled = false;
       const onFail = (err) => {
-        if (settled) return;
+        if (settled || this._cancelled) return;
         settled = true;
-        clearTimeout(timer);
+        this._clearTimer(timer);
         this._glbInFlight = Math.max(0, this._glbInFlight - 1);
         if (job.attempt < job.retries) {
           job.attempt++;
           const delay = 350 * Math.pow(2, job.attempt - 1);
-          setTimeout(() => {
+          this._scheduleTimer(() => {
             this._glbQueue.push(job);
             this._drainGLBQueue();
           }, delay);
@@ -1069,100 +1152,117 @@ export class OfficeScene {
           this._drainGLBQueue();
         }
       };
-      const timer = setTimeout(() => onFail(new Error(`Timeout loading ${job.url}`)), 15000);
-      this.gltfLoader.load(
-        reqUrl,
-        (gltf) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          this._glbInFlight = Math.max(0, this._glbInFlight - 1);
-          this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
-          this._assetStats.loaded.push(job.url);
-          try {
-            const root = gltf.scene;
-            const tmpSize = new THREE.Vector3();
-            const needsDoubleSide = /window_curtain|fiddle_fig|snake_plant/.test(job.url);
-            root.traverse((obj) => {
-              if (obj.isMesh) {
-                if (obj.geometry && !obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
-                const bb = obj.geometry?.boundingBox;
-                const maxDim = bb ? bb.getSize(tmpSize).length() : 0.2;
-                // Only silhouette-scale meshes cast shadows (skips hundreds of tiny bolts/LEDs/interior PC parts!)
-                obj.castShadow = isEnclosedPC ? maxDim >= 0.22 : maxDim >= 0.065;
-                obj.receiveShadow = true;
-                // Downgrade GLB KHR_materials_clearcoat MeshPhysicalMaterial to fast MeshStandardMaterial
-                // (eliminates slow physical-clearcoat shader family compilations on first render!)
-                if (obj.material && obj.material.isMeshPhysicalMaterial) {
-                  const pm = obj.material;
-                  const sm = new THREE.MeshStandardMaterial({
-                    name: pm.name,
-                    color: pm.color,
-                    map: pm.map,
-                    roughness: pm.roughness,
-                    metalness: pm.metalness,
-                    roughnessMap: pm.roughnessMap,
-                    metalnessMap: pm.metalnessMap,
-                    normalMap: pm.normalMap,
-                    normalScale: pm.normalScale,
-                    aoMap: pm.aoMap,
-                    aoMapIntensity: pm.aoMapIntensity,
-                    emissive: pm.emissive,
-                    emissiveMap: pm.emissiveMap,
-                    emissiveIntensity: pm.emissiveIntensity,
-                    transparent: pm.transparent,
-                    opacity: pm.opacity,
-                    alphaTest: pm.alphaTest,
-                    side: pm.side,
-                  });
-                  pm.dispose();
-                  obj.material = sm;
-                }
-                if (obj.material) {
-                  // Solid closed GLB meshes don't need DoubleSide — collapsing them to FrontSide merges shader permutations & enables backface culling!
-                  if (!needsDoubleSide) {
-                    obj.material.side = THREE.FrontSide;
+      const timer = this._scheduleTimer(() => onFail(new Error(`Timeout loading ${job.url}`)), 20000);
+      fetch(reqUrl, { signal: this._abortController.signal })
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status} for ${job.url}`);
+          return res.arrayBuffer();
+        })
+        .then((buffer) => {
+          if (settled || this._cancelled) return;
+          this.gltfLoader.parse(
+            buffer,
+            '',
+            (gltf) => {
+              if (settled || this._cancelled) return;
+              settled = true;
+              this._clearTimer(timer);
+              this._glbInFlight = Math.max(0, this._glbInFlight - 1);
+              this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
+              this._assetStats.loaded.push(job.url);
+              try {
+                const root = gltf.scene;
+                const tmpSize = new THREE.Vector3();
+                const needsDoubleSide = /window_curtain|fiddle_fig|snake_plant/.test(job.url);
+                root.traverse((obj) => {
+                  if (obj.isMesh) {
+                    if (obj.geometry && !obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+                    const bb = obj.geometry?.boundingBox;
+                    const maxDim = bb ? bb.getSize(tmpSize).length() : 0.2;
+                    // Only silhouette-scale meshes cast shadows (skips hundreds of tiny bolts/LEDs/interior PC parts!)
+                    obj.castShadow = isEnclosedPC ? maxDim >= 0.22 : maxDim >= 0.065;
+                    obj.receiveShadow = true;
+                    // Downgrade GLB KHR_materials_clearcoat MeshPhysicalMaterial to fast MeshStandardMaterial
+                    if (obj.material && obj.material.isMeshPhysicalMaterial) {
+                      const pm = obj.material;
+                      const sm = new THREE.MeshStandardMaterial({
+                        name: pm.name,
+                        color: pm.color,
+                        map: pm.map,
+                        roughness: pm.roughness,
+                        metalness: pm.metalness,
+                        roughnessMap: pm.roughnessMap,
+                        metalnessMap: pm.metalnessMap,
+                        normalMap: pm.normalMap,
+                        normalScale: pm.normalScale,
+                        aoMap: pm.aoMap,
+                        aoMapIntensity: pm.aoMapIntensity,
+                        emissive: pm.emissive,
+                        emissiveMap: pm.emissiveMap,
+                        emissiveIntensity: pm.emissiveIntensity,
+                        transparent: pm.transparent,
+                        opacity: pm.opacity,
+                        alphaTest: pm.alphaTest,
+                        side: pm.side,
+                      });
+                      pm.dispose();
+                      obj.material = sm;
+                    }
+                    if (obj.material) {
+                      if (!needsDoubleSide) {
+                        obj.material.side = THREE.FrontSide;
+                      }
+                      obj.material.forceSinglePass = true;
+                      if (obj.material.isMeshStandardMaterial && obj.material.metalness >= 0.55) {
+                        obj.material.envMapIntensity = 1.48;
+                      }
+                    }
                   }
-                  // Prevent Three.js r170 from compiling 2 separate BackSide+FrontSide shader programs for every transparent mesh!
-                  obj.material.forceSinglePass = true;
-                  if (obj.material.isMeshStandardMaterial && obj.material.metalness >= 0.55) {
-                    obj.material.envMapIntensity = 1.48;
+                });
+                job.onLoaded(root);
+                root.traverse((obj) => {
+                  if (obj.isMesh && obj.material && obj.material.transparent) {
+                    obj.material.forceSinglePass = true;
                   }
-                }
+                });
+              } catch (cbErr) {
+                console.warn(`Error processing GLB ${job.url}:`, cbErr);
               }
-            });
-            job.onLoaded(root);
-            // Ensure any materials replaced inside onLoaded also keep single-pass transparency
-            root.traverse((obj) => {
-              if (obj.isMesh && obj.material && obj.material.transparent) {
-                obj.material.forceSinglePass = true;
-              }
-            });
-          } catch (cbErr) {
-            console.warn(`Error processing GLB ${job.url}:`, cbErr);
-          }
-          this._notifyAssetProgress(job.url);
-          this._drainGLBQueue();
-        },
-        undefined,
-        onFail
-      );
+              this._notifyAssetProgress(job.url);
+              this._drainGLBQueue();
+            },
+            onFail
+          );
+        })
+        .catch((err) => {
+          if (this._cancelled || err?.name === 'AbortError') return;
+          onFail(err);
+        });
     }
   }
 
   _loadSkylineTexture(mood, attempt = 0, trackInPreamble = true) {
+    if (this._cancelled) return null;
     const reqUrl = versionedUrl(mood.skylineUrl, attempt > 0 ? { retry: attempt } : null);
     if (trackInPreamble && attempt === 0) {
       this._assetStats.total++;
       this._assetStats.pending++;
     }
+    const placeholderTex = new THREE.Texture();
+    placeholderTex.colorSpace = THREE.SRGBColorSpace;
+    placeholderTex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    placeholderTex.wrapS = THREE.MirroredRepeatWrapping;
+    placeholderTex.wrapT = THREE.ClampToEdgeWrapping;
+    placeholderTex.repeat.set(1.98, 1.0);
+    placeholderTex.offset.set(-0.49, 0.0);
+
     let settled = false;
     const onFail = (err) => {
-      if (settled) return;
+      if (settled || this._cancelled) return;
       settled = true;
-      clearTimeout(timer);
+      this._clearTimer(timer);
       if (attempt < 3) {
-        setTimeout(() => this._loadSkylineTexture(mood, attempt + 1, trackInPreamble), 350 * Math.pow(2, attempt));
+        this._scheduleTimer(() => this._loadSkylineTexture(mood, attempt + 1, trackInPreamble), 350 * Math.pow(2, attempt));
       } else {
         if (trackInPreamble) {
           this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
@@ -1172,13 +1272,13 @@ export class OfficeScene {
         console.warn(`Failed to load skyline texture ${mood.skylineUrl}:`, err);
       }
     };
-    const timer = setTimeout(() => onFail(new Error(`Timeout loading ${mood.skylineUrl}`)), 15000);
-    const tex = this.texLoader.load(
+    const timer = this._scheduleTimer(() => onFail(new Error(`Timeout loading ${mood.skylineUrl}`)), 20000);
+    this._fetchTextureAbortable(
       reqUrl,
       (loadedTex) => {
-        if (settled) return;
+        if (settled || this._cancelled) return;
         settled = true;
-        clearTimeout(timer);
+        this._clearTimer(timer);
         try {
           loadedTex.colorSpace = THREE.SRGBColorSpace;
           loadedTex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
@@ -1205,39 +1305,28 @@ export class OfficeScene {
           this._notifyAssetProgress(mood.skylineUrl);
         }
       },
-      undefined,
       onFail
     );
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
-    tex.wrapS = THREE.MirroredRepeatWrapping;
-    tex.wrapT = THREE.ClampToEdgeWrapping;
-    tex.repeat.set(1.98, 1.0);
-    tex.offset.set(-0.49, 0.0);
-    return tex;
-  }
-
-  preloadSecondarySkylines() {
-    for (const mood of SKY_MOODS) {
-      if (!this.skylineTextures[mood.id]) {
-        this.skylineTextures[mood.id] = this._loadSkylineTexture(mood, 0, false);
-      }
-    }
+    return placeholderTex;
   }
 
   _loadTrackedTexture(url, onReady, attempt = 0) {
+    if (this._cancelled) return null;
     const reqUrl = versionedUrl(url, attempt > 0 ? { retry: attempt } : null);
     if (attempt === 0) {
       this._assetStats.total++;
       this._assetStats.pending++;
     }
+    const placeholderTex = new THREE.Texture();
+    placeholderTex.colorSpace = THREE.SRGBColorSpace;
+
     let settled = false;
     const onFail = (err) => {
-      if (settled) return;
+      if (settled || this._cancelled) return;
       settled = true;
-      clearTimeout(timer);
+      this._clearTimer(timer);
       if (attempt < 3) {
-        setTimeout(() => this._loadTrackedTexture(url, onReady, attempt + 1), 350 * Math.pow(2, attempt));
+        this._scheduleTimer(() => this._loadTrackedTexture(url, onReady, attempt + 1), 350 * Math.pow(2, attempt));
       } else {
         this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
         this._assetStats.failed.push(url);
@@ -1245,13 +1334,13 @@ export class OfficeScene {
         this._notifyAssetProgress(url);
       }
     };
-    const timer = setTimeout(() => onFail(new Error(`Timeout loading ${url}`)), 15000);
-    const tex = this.texLoader.load(
+    const timer = this._scheduleTimer(() => onFail(new Error(`Timeout loading ${url}`)), 20000);
+    this._fetchTextureAbortable(
       reqUrl,
       (loadedTex) => {
-        if (settled) return;
+        if (settled || this._cancelled) return;
         settled = true;
-        clearTimeout(timer);
+        this._clearTimer(timer);
         try {
           loadedTex.colorSpace = THREE.SRGBColorSpace;
           loadedTex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
@@ -1266,11 +1355,9 @@ export class OfficeScene {
         this._assetStats.loaded.push(url);
         this._notifyAssetProgress(url);
       },
-      undefined,
       onFail
     );
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
+    return placeholderTex;
   }
 
   _updateEnvironmentMap(mood) {
@@ -1424,9 +1511,10 @@ export class OfficeScene {
     });
     this.scene.add(new THREE.Mesh(new THREE.SphereGeometry(180, 32, 20), skyMat));
 
-    // Load the active Golden Hour skyline upfront; secondary moods preload asynchronously right after reveal
-    const initMood = SKY_MOODS[this.moodIndex] || SKY_MOODS[0];
-    this.skylineTextures[initMood.id] = this._loadSkylineTexture(initMood, 0, true);
+    // Load ALL 3 compressed panoramic city skylines upfront so every sky mood is immediately ready with zero popping
+    for (const mood of SKY_MOODS) {
+      this.skylineTextures[mood.id] = this._loadSkylineTexture(mood, 0, true);
+    }
 
     // Wide 207° curved panoramic photographic cyclorama so even extreme left/right room orbit angles
     // never expose a vertical cutoff edge outside the window (MirroredRepeatWrapping keeps Bay Bridge centered!)
