@@ -7,6 +7,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { BlueAngelsShow } from './blueAngelsShow.js';
 
 // Camera presets matching index.html [data-cam] buttons.
 export const CAMERA_PRESETS = {
@@ -1255,6 +1256,41 @@ export class OfficeScene {
     return tex;
   }
 
+  _loadTrackedTexture(url, onReady, attempt = 0) {
+    const reqUrl = attempt > 0 ? `${url}?retry=${attempt}` : url;
+    if (attempt === 0) {
+      this._assetStats.total++;
+      this._assetStats.pending++;
+    }
+    const tex = this.texLoader.load(
+      reqUrl,
+      (loadedTex) => {
+        loadedTex.colorSpace = THREE.SRGBColorSpace;
+        loadedTex.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
+        loadedTex.minFilter = THREE.LinearMipmapLinearFilter;
+        loadedTex.magFilter = THREE.LinearFilter;
+        loadedTex.needsUpdate = true;
+        this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
+        this._assetStats.loaded.push(url);
+        if (onReady) onReady(loadedTex);
+        this._notifyAssetProgress(url);
+      },
+      undefined,
+      (err) => {
+        if (attempt < 3) {
+          setTimeout(() => this._loadTrackedTexture(url, onReady, attempt + 1), 350 * Math.pow(2, attempt));
+        } else {
+          this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
+          this._assetStats.failed.push(url);
+          console.warn(`Failed to load texture ${url}:`, err);
+          this._notifyAssetProgress(url);
+        }
+      }
+    );
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
   _updateEnvironmentMap(mood) {
     // High-dynamic-range architectural studio environment so anodized gold (DGX Spark), brushed steel (CRS804),
     // platinum aluminum (Dell stand), and dark gunmetal titanium (RTX 5090 FE) catch crisp specular bands & dark contrast!
@@ -1448,6 +1484,13 @@ export class OfficeScene {
     );
     extRail.position.set(-0.15, 0.96, -3.65);
     this.scene.add(extRail);
+
+    // U.S. Navy Blue Angels 6-Jet Fleet Week Airshow over San Francisco Bay (outside window, inside cyclorama!)
+    this.blueAngels = new BlueAngelsShow(this.scene, this.camera);
+    this._loadGLB('assets/models/blue_angel_f18.glb', (jetModel) => {
+      this.blueAngels.attachModel(jetModel);
+      this.blueAngels.applySkyMood(SKY_MOODS[this.moodIndex].id);
+    });
 
     // Clickable window hotspot
     const winHit = new THREE.Mesh(
@@ -2307,7 +2350,109 @@ export class OfficeScene {
       g.rotation.y = rotY;
       this.scene.add(g);
     };
-    addFramedArt(-3.17, 1.78, -1.62, Math.PI / 2, 0.58, 0.72, 0);
+    // Salvador Dalí — "The Persistence of Memory" (1931) museum-framed oil painting on the left wood-slat accent wall!
+    // Exact 1.339:1 landscape canvas (0.84 m x 0.627 m) with stepped dark-walnut gallery frame & brushed antique-gold inner fillet.
+    {
+      const daliGroup = new THREE.Group();
+      const cw = 0.84;
+      const ch = 0.627;
+
+      // Subtle procedural linen canvas weave bump so the oil painting catches realistic gallery light
+      const weaveC = document.createElement('canvas');
+      weaveC.width = weaveC.height = 128;
+      const wctx = weaveC.getContext('2d');
+      wctx.fillStyle = '#808080';
+      wctx.fillRect(0, 0, 128, 128);
+      for (let i = 0; i < 128; i += 2) {
+        wctx.fillStyle = i % 4 === 0 ? '#929292' : '#707070';
+        wctx.fillRect(i, 0, 1, 128);
+        wctx.fillRect(0, i, 128, 1);
+      }
+      const weaveBump = new THREE.CanvasTexture(weaveC);
+      weaveBump.wrapS = weaveBump.wrapT = THREE.RepeatWrapping;
+      weaveBump.repeat.set(16, 12);
+
+      const outerFrameMat = new THREE.MeshStandardMaterial({
+        color: 0x1b1510,
+        roughness: 0.42,
+        metalness: 0.14,
+      });
+      const goldFilletMat = new THREE.MeshStandardMaterial({
+        color: 0xb99248,
+        roughness: 0.34,
+        metalness: 0.82,
+      });
+
+      // Stepped antique brushed-gold museum fillet lip inset cleanly inside the outer molding (ZERO overlap!)
+      const fW = 0.014;
+      const fD = 0.022;
+      const barW = 0.044;
+      const barD = 0.036;
+      const innerW = cw + fW * 2;
+      const innerH = ch + fW * 2;
+      const outerW = innerW + barW * 2;
+      const outerH = innerH + barW * 2;
+      const addBar = (w, h, d, bx, by, bz, mat) => {
+        const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, 0.004), mat);
+        m.position.set(bx, by, bz);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        daliGroup.add(m);
+      };
+      // Gold inner fillet bars
+      addBar(innerW, fW, fD, 0, ch / 2 + fW / 2, -0.002, goldFilletMat);
+      addBar(innerW, fW, fD, 0, -ch / 2 - fW / 2, -0.002, goldFilletMat);
+      addBar(fW, ch, fD, -cw / 2 - fW / 2, 0, -0.002, goldFilletMat);
+      addBar(fW, ch, fD, cw / 2 + fW / 2, 0, -0.002, goldFilletMat);
+
+      // Outer dark walnut gallery frame molding strictly outside the gold fillet
+      addBar(outerW, barW, barD, 0, innerH / 2 + barW / 2, 0, outerFrameMat);
+      addBar(outerW, barW, barD, 0, -innerH / 2 - barW / 2, 0, outerFrameMat);
+      addBar(barW, innerH, barD, -innerW / 2 - barW / 2, 0, 0, outerFrameMat);
+      addBar(barW, innerH, barD, innerW / 2 + barW / 2, 0, 0, outerFrameMat);
+
+      // Solid backing panel behind canvas
+      const backing = new THREE.Mesh(new THREE.BoxGeometry(cw + 0.02, ch + 0.02, 0.010), outerFrameMat);
+      backing.position.set(0, 0, -0.012);
+      daliGroup.add(backing);
+
+      const daliMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        bumpMap: weaveBump,
+        bumpScale: 0.004,
+        roughness: 0.46,
+        metalness: 0.02,
+        envMapIntensity: 0.32,
+        emissive: new THREE.Color(0xffffff),
+        emissiveIntensity: 0.14,
+      });
+      const daliTex = this._loadTrackedTexture('assets/textures/dali_persistence_of_memory.jpg', (tex) => {
+        daliMat.map = tex;
+        daliMat.emissiveMap = tex;
+        daliMat.needsUpdate = true;
+      });
+      daliMat.map = daliTex;
+      daliMat.emissiveMap = daliTex;
+
+      const canvasMesh = new THREE.Mesh(new THREE.PlaneGeometry(cw, ch), daliMat);
+      canvasMesh.position.set(0, 0, -0.005);
+      daliGroup.add(canvasMesh);
+
+      // Sleek matte-brass museum picture light mounted just above the frame grazing the Dalí oil painting
+      const picLightBar = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.34, 14), goldFilletMat);
+      picLightBar.rotation.z = Math.PI / 2;
+      picLightBar.position.set(0, outerH / 2 + 0.055, 0.095);
+      daliGroup.add(picLightBar);
+      const picLightStem = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.11, 10), goldFilletMat);
+      picLightStem.rotation.x = Math.PI / 2;
+      picLightStem.position.set(0, outerH / 2 + 0.055, 0.042);
+      daliGroup.add(picLightStem);
+
+      // Mounted flush against the front of the left oak slats (x = -3.150)
+      daliGroup.position.set(-3.132, 1.76, -1.56);
+      daliGroup.rotation.y = Math.PI / 2;
+      this.scene.add(daliGroup);
+    }
     // Iconic cobalt-blue SIGNAL / NOISE poster cleanly visible & 100% unobstructed between right curtain and right viewport edge!
     addFramedArt(2.64, 1.72, -2.56, 0, 0.36, 0.46, 1);
 
@@ -3722,6 +3867,9 @@ export class OfficeScene {
       this.beamMat.color.setHex(m.dirLightColor);
       this.beamMat.opacity = m.beamOpacity;
     }
+    if (this.blueAngels) {
+      this.blueAngels.applySkyMood(m.id);
+    }
 
     this._updateEnvironmentMap(m);
     return m;
@@ -3874,6 +4022,10 @@ export class OfficeScene {
 
       if (this.omarchyScreen) {
         this.omarchyScreen.tick(elapsed);
+      }
+
+      if (this.blueAngels) {
+        this.blueAngels.update(dt);
       }
 
       this.renderFrame();

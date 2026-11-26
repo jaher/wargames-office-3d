@@ -232,7 +232,8 @@ def test_live_scene_window_and_assets(port):
         assert preamble["overlayHidden"], f"Overlay still visible after __officeReady: {preamble}"
         assert stats["pending"] == 0, f"Revealed scene while assets still pending: {stats}"
         assert len(stats["failed"]) == 0, f"Failed 3D assets: {stats['failed']}"
-        assert len(stats["loaded"]) >= 24, f"Too few assets loaded: {len(stats['loaded'])}"
+        assert len(stats["loaded"]) >= 26, f"Too few assets loaded: {len(stats['loaded'])}"
+        assert cdp.eval("Boolean(window.__blueAngelsActive)"), "Blue Angels airshow did not initialize"
         assert preamble["jumpCount"] > 0 and preamble["transcriptCount"] > 0, f"Revealed before solutions/narration ready: {preamble}"
 
         active_cam = cdp.eval("document.querySelector('.cam-btn.active')?.dataset?.cam")
