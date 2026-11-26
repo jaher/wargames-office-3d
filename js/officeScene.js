@@ -2097,13 +2097,18 @@ export class OfficeScene {
 
     // Authentic Corsair Peripherals (Corsair K70 PRO TKL Black Aluminum Keyboard + Corsair M75 Wireless Black Mouse — NO speakers!)
     this._loadGLB('assets/models/corsair_k70_kb.glb', (kb) => {
-      kb.position.set(-0.68, sy + 0.0045, -0.72);
+      kb.position.set(-0.68, sy + 0.00485, -0.72);
       kb.traverse((obj) => {
-        if (obj.isMesh && obj.material?.map) {
-          obj.material.map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        if (obj.isMesh && obj.material) {
+          if (obj.material.map) {
+            obj.material.map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+          }
+          if (obj.material.emissiveMap) {
+            obj.material.emissiveMap.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+          }
         }
       });
-      this._addContactShadow(deskGroup, -0.68, sy + 0.0048, -0.72, 0.39, 0.16, 0.86);
+      this._addContactShadow(deskGroup, -0.68, sy + 0.00465, -0.72, 0.385, 0.155, 0.86);
       deskGroup.add(kb);
     });
 

@@ -78,6 +78,18 @@ function bootstrap() {
       }
       setActiveCamButton(dom.camButtons, qsCam);
     }
+    const qsCamPos = qs.get('camPos');
+    const qsCamTarget = qs.get('camTarget');
+    if (qsCamPos && qsCamTarget && office) {
+      const p = qsCamPos.split(',').map(Number);
+      const t = qsCamTarget.split(',').map(Number);
+      if (p.length === 3 && t.length === 3 && p.every(Number.isFinite) && t.every(Number.isFinite)) {
+        office.animatingCam = null;
+        office.camera.position.set(p[0], p[1], p[2]);
+        office.controls.target.set(t[0], t[1], t[2]);
+        office.controls.update();
+      }
+    }
     const smallViewportMq = window.matchMedia('(max-width: 960px), (max-height: 500px)');
     const qsPanel = qs.get('panel');
     const shouldStartCollapsed = qsPanel === '0' || (qsPanel !== '1' && smallViewportMq.matches);
