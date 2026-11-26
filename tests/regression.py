@@ -234,6 +234,14 @@ def test_live_scene_window_and_assets(port):
         assert len(stats["failed"]) == 0, f"Failed 3D assets: {stats['failed']}"
         assert len(stats["loaded"]) >= 26, f"Too few assets loaded: {len(stats['loaded'])}"
         assert cdp.eval("Boolean(window.__blueAngelsActive)"), "Blue Angels airshow did not initialize"
+        # Verify both RTX 3090 FE fans (front & back) are registered and actively spinning in live scene
+        fans_before = cdp.eval("Object.fromEntries((window.__rtx3090Fans || []).map(f => [f.name, f.rotation.z]))")
+        assert "RTX3090_FanFront" in fans_before and "RTX3090_FanBack" in fans_before, f"Missing RTX 3090 fans: {fans_before}"
+        time.sleep(1.0)
+        fans_after = cdp.eval("Object.fromEntries((window.__rtx3090Fans || []).map(f => [f.name, f.rotation.z]))")
+        df_front = fans_after["RTX3090_FanFront"] - fans_before["RTX3090_FanFront"]
+        df_back = fans_after["RTX3090_FanBack"] - fans_before["RTX3090_FanBack"]
+        assert df_front > 0.15 and df_back < -0.15, f"RTX 3090 fans not spinning: before={fans_before}, after={fans_after}"
         assert preamble["jumpCount"] > 0 and preamble["transcriptCount"] > 0, f"Revealed before solutions/narration ready: {preamble}"
 
         active_cam = cdp.eval("document.querySelector('.cam-btn.active')?.dataset?.cam")

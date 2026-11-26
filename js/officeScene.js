@@ -2776,7 +2776,17 @@ export class OfficeScene {
       const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
       egpu.position.set(egpuX, sy, egpuZ);
       egpu.rotation.y = egpuRotY;
+      const rtx3090Fans = [];
       egpu.traverse((obj) => {
+        // Multi-material Blender meshes (blades + hub) export as a glTF Group named RTX3090_FanFront / RTX3090_FanBack;
+        // register them BEFORE the isMesh guard so the entire impeller (blades + hub) spins around its local Z axis!
+        if (obj.name === 'RTX3090_FanFront') {
+          this.spinningFans.push({ obj, axis: 'z', speed: 8.4 });
+          rtx3090Fans.push(obj);
+        } else if (obj.name === 'RTX3090_FanBack') {
+          this.spinningFans.push({ obj, axis: 'z', speed: -8.8 });
+          rtx3090Fans.push(obj);
+        }
         if (!obj.isMesh) return;
         obj.userData.camPreset = 'pc';
         this.clickableMeshes.push(obj);
@@ -2794,6 +2804,13 @@ export class OfficeScene {
             obj.material.envMapIntensity = 1.15;
           } else if (mName === 'Comma_AluBase' || mName === 'RTX3090_GunmetalBody') {
             obj.material.envMapIntensity = 0.65;
+          } else if (mName === 'RTX3090_FanBlade') {
+            obj.material.color.setHex(0x2a303c);
+            obj.material.roughness = 0.34;
+            obj.material.metalness = 0.32;
+            obj.material.envMapIntensity = 1.15;
+          } else if (mName === 'RTX3090_FanHub') {
+            obj.material.envMapIntensity = 1.25;
           } else if (mName === 'RTX3090_GeForceLogo') {
             obj.material.emissiveIntensity = 1.65;
             obj.material.polygonOffset = true;
@@ -2807,13 +2824,8 @@ export class OfficeScene {
             obj.material.polygonOffsetUnits = -2;
           }
         }
-        // Register both RTX 3090 FE push-pull flow-through axial fans for live Three.js rotation
-        if (obj.name === 'RTX3090_FanFront') {
-          this.spinningFans.push({ obj, axis: 'z', speed: 7.6 });
-        } else if (obj.name === 'RTX3090_FanBack') {
-          this.spinningFans.push({ obj, axis: 'z', speed: -8.1 });
-        }
       });
+      window.__rtx3090Fans = rtx3090Fans;
       this._addContactShadow(deskGroup, egpuX + 0.02, sy + 0.0012, egpuZ, 0.34, 0.16, 0.92);
       deskGroup.add(egpu);
     });
