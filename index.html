@@ -6,6 +6,14 @@
   <title>Wargames Office 3D — OverTheWire Solutions</title>
   <meta name="description" content="Interactive 3D office with an Omarchy Linux workstation, Corsair RTX 5090 rig, 8x DGX Spark cluster, and live narrated OverTheWire wargame solutions.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231a1b26'/><path d='M16 6L26 26H21L16 15L11 26H6Z' fill='%237aa2f7'/></svg>">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/OrbitControls.js">
@@ -18,14 +26,6 @@
   <link rel="modulepreload" href="js/omarchyScreen.js">
   <link rel="modulepreload" href="js/solutions.js">
   <link rel="stylesheet" href="css/style.css">
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-      }
-    }
-  </script>
 </head>
 <body>
   <div id="app" class="app">
@@ -55,8 +55,8 @@
       </header>
 
       <nav class="camera-bar" aria-label="Camera Presets">
-        <button class="cam-btn active" data-cam="overview" title="Shortcut: 1">1 · Office</button>
-        <button class="cam-btn" data-cam="monitor" title="Shortcut: 2">2 · Omarchy Monitor</button>
+        <button class="cam-btn" data-cam="overview" title="Shortcut: 1">1 · Office</button>
+        <button class="cam-btn active" data-cam="monitor" title="Shortcut: 2">2 · Omarchy Monitor</button>
         <button class="cam-btn" data-cam="pc" title="Shortcut: 3">3 · Corsair RTX 5090</button>
         <button class="cam-btn" data-cam="cluster" title="Shortcut: 4">4 · 6× DGX Spark + 2× GX10 + CRS804</button>
         <button class="cam-btn" data-cam="window" title="Shortcut: 5">5 · Skyline View</button>

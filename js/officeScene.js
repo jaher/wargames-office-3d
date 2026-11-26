@@ -38,6 +38,10 @@ export const CAMERA_PRESETS = {
     pos: [0.58, 1.27, -0.57],
     target: [0.85, 1.04, -0.98],
   },
+  cables_rear: {
+    pos: [0.68, 1.15, -2.18],
+    target: [0.46, 0.72, -1.16],
+  },
 };
 
 // Note: BMP-safe Unicode icons (☀ / ☾ / ☼) ensure zero missing-glyph tofu boxes across all OS/browsers.
@@ -1081,7 +1085,7 @@ export class OfficeScene {
     this.controls.maxPolarAngle = Math.PI * 0.56;
     this.controls.minPolarAngle = 0.22;
 
-    const p = CAMERA_PRESETS.overview;
+    const p = CAMERA_PRESETS.monitor;
     this.camera.position.set(...p.pos);
     this.controls.target.set(...p.target);
     this.controls.update();
@@ -2168,12 +2172,12 @@ export class OfficeScene {
       deskGroup.add(isobar);
     });
 
-    // Realistic black AC power cords bundled naturally with gentle gravity slack into a tidy rear drop spine into the Tripp Lite ISOBAR8ULTRA!
+    // Realistic black AC power cords routed device-to-outlet with clean desk-edge clearance (z = -1.400) & natural gravity slack!
     const acCordMat = new THREE.MeshStandardMaterial({ color: 0x0e1014, roughness: 0.80, metalness: 0.04 });
     const acPlugMat = new THREE.MeshStandardMaterial({ color: 0x14171d, roughness: 0.64, metalness: 0.08 });
     const addAcCord = (pts, radius = 0.0044, addPlug = true) => {
-      const curve = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)));
-      const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 36, radius, 8, false), acCordMat);
+      const curve = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)), false, 'centripetal', 0.5);
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 52, radius, 8, false), acCordMat);
       tube.castShadow = true;
       deskGroup.add(tube);
       if (addPlug) {
@@ -2189,83 +2193,154 @@ export class OfficeScene {
       const c = Math.cos(isoRotY), s = Math.sin(isoRotY);
       return [isoX + lx * c + lz * s, isoTopY, isoZ - lx * s + lz * c];
     };
-    // 1. Corsair HX1500i PSU heavy-duty AC cord (runs under rear cable beam then drops cleanly along the bundled spine with natural slack!)
+
+    // 1. Corsair HX1500i PSU heavy-duty AC cord — plugged DIRECTLY into rotated Corsair 5000D rear PSU AC inlet (0.713, sy+0.088, -1.165)!
+    const pcRotY = 0.56;
+    const pcPsuInlet = [
+      0.86 + (-0.016) * Math.cos(pcRotY) + (-0.252) * Math.sin(pcRotY),
+      sy + 0.088,
+      -0.96 - (-0.016) * Math.sin(pcRotY) + (-0.252) * Math.cos(pcRotY),
+    ];
+    const pcIecPlug = new THREE.Mesh(new RoundedBoxGeometry(0.026, 0.022, 0.032, 2, 0.004), acPlugMat);
+    pcIecPlug.position.set(
+      pcPsuInlet[0] - Math.sin(pcRotY) * 0.014,
+      pcPsuInlet[1],
+      pcPsuInlet[2] - Math.cos(pcRotY) * 0.014
+    );
+    pcIecPlug.rotation.y = pcRotY;
+    deskGroup.add(pcIecPlug);
     addAcCord([
-      [0.98, sy + 0.08, -1.24],
-      [0.92, sy + 0.006, -1.41],
-      [0.84, 0.68, -1.43],
-      [0.54, 0.64, -1.43],
-      [0.50, 0.34, -1.42],
-      [0.55, 0.14, -1.36],
+      [pcPsuInlet[0] - Math.sin(pcRotY) * 0.024, pcPsuInlet[1], pcPsuInlet[2] - Math.cos(pcRotY) * 0.024],
+      [pcPsuInlet[0] - Math.sin(pcRotY) * 0.062, sy + 0.072, pcPsuInlet[2] - Math.cos(pcRotY) * 0.062],
+      [0.648, sy + 0.008, -1.295],
+      [0.628, sy + 0.006, -1.365],
+      [0.618, sy + 0.003, -1.414],
+      [0.605, 0.716, -1.428],
+      [0.542, 0.54, -1.430],
+      [0.515, 0.24, -1.422],
+      [0.545, 0.115, -1.355],
       isoPt(0.084, 0.016),
     ], 0.0052);
-    // 2. 6x DGX Spark + 2x ASUS GX10 cluster primary power feeds (bundled neatly down the rear vertical spine with gentle floor slack!)
+
+    // 2. 6× NVIDIA DGX Spark + 2× ASUS GX10 Rear USB-C PD Power Harness -> Grounded Rear PD Hub -> 2 AC Feeders into ISOBAR8ULTRA Bank 3!
+    const pdHub = new THREE.Mesh(new RoundedBoxGeometry(0.070, 0.024, 0.088, 2, 0.005), acPlugMat);
+    pdHub.position.set(0.355, sy + 0.0125, -1.275);
+    pdHub.castShadow = true;
+    pdHub.receiveShadow = true;
+    deskGroup.add(pdHub);
+    for (let i = 0; i < 8; i++) {
+      const nodeY = sy + i * 0.0543 + 0.020;
+      const usbcX = 0.31 + 0.047;
+      const usbcZ = -1.08 - 0.073;
+      const pBoot = new THREE.Mesh(new RoundedBoxGeometry(0.011, 0.007, 0.016, 2, 0.002), acPlugMat);
+      pBoot.position.set(usbcX, nodeY, usbcZ - 0.006);
+      deskGroup.add(pBoot);
+
+      const spineX = 0.368 + (i % 2) * 0.005;
+      const spineZ = -1.178 - Math.floor(i / 2) * 0.0035;
+      const pts = [
+        [usbcX, nodeY, usbcZ - 0.011],
+        [usbcX + 0.008, nodeY, spineZ],
+        [spineX, Math.max(sy + 0.012, nodeY - 0.008), spineZ],
+      ];
+      if (i >= 3) {
+        pts.push([spineX, sy + (nodeY - sy) * 0.52, spineZ]);
+      }
+      pts.push(
+        [spineX, sy + 0.014, spineZ - 0.008],
+        [0.362 + (i % 2) * 0.006, sy + 0.006, -1.215],
+        [0.345 + (i % 3) * 0.010, sy + 0.012, -1.238]
+      );
+      addAcCord(pts, 0.0021, false);
+    }
+    // Two primary AC feeder cords exiting rear of PD hub cleanly over the desk back edge (z=-1.400) down to ISOBAR8ULTRA Bank 3
     addAcCord([
-      [0.34, sy + 0.16, -1.19],
-      [0.36, sy + 0.006, -1.41],
-      [0.44, 0.42, -1.43],
-      [0.47, 0.14, -1.39],
+      [0.370, sy + 0.012, -1.318],
+      [0.382, sy + 0.006, -1.368],
+      [0.390, sy + 0.003, -1.414],
+      [0.402, 0.716, -1.428],
+      [0.448, 0.44, -1.430],
+      [0.468, 0.145, -1.392],
       isoPt(0.043, -0.018),
-    ], 0.0048);
+    ], 0.0046);
     addAcCord([
-      [0.28, sy + 0.05, -1.19],
-      [0.31, sy + 0.006, -1.41],
-      [0.41, 0.38, -1.43],
-      [0.45, 0.13, -1.35],
+      [0.342, sy + 0.012, -1.318],
+      [0.354, sy + 0.006, -1.368],
+      [0.364, sy + 0.003, -1.414],
+      [0.378, 0.716, -1.428],
+      [0.422, 0.40, -1.430],
+      [0.448, 0.135, -1.352],
       isoPt(0.043, 0.016),
     ], 0.0046);
-    // 3. MikroTik CRS804 switch AC power cord (joins the rear bundled spine cleanly)
+
+    // 3. MikroTik CRS804 switch AC power cord — plugged DIRECTLY into rear PSU1 IEC inlet (-0.055, sy+0.022, -1.242), clearing rear desk edge cleanly!
+    const crsPlug = new THREE.Mesh(new RoundedBoxGeometry(0.022, 0.018, 0.026, 2, 0.003), acPlugMat);
+    crsPlug.position.set(-0.055, sy + 0.022, -1.252);
+    deskGroup.add(crsPlug);
     addAcCord([
-      [0.04, sy + 0.025, -1.24],
-      [0.08, sy + 0.006, -1.41],
-      [0.36, 0.64, -1.43],
-      [0.42, 0.36, -1.43],
-      [0.41, 0.13, -1.38],
+      [-0.055, sy + 0.022, -1.262],
+      [-0.042, sy + 0.008, -1.315],
+      [-0.020, sy + 0.005, -1.368],
+      [-0.005, sy + 0.003, -1.414],
+      [0.025, 0.716, -1.428],
+      [0.355, 0.640, -1.430],
+      [0.415, 0.360, -1.428],
+      [0.408, 0.132, -1.380],
       isoPt(0.002, -0.018),
     ], 0.0042);
-    // 4. Dell UltraSharp U3425WE monitor AC cord (tucked along underside rear beam -> joins spine -> gentle slack into Bank 1)
+
+    // 4. Dell UltraSharp U3425WE monitor AC cord — exits behind monitor stand column (-0.60, sy+0.22, -1.185), clears rear desk edge cleanly!
     addAcCord([
-      [-0.60, sy + 0.18, -1.22],
-      [-0.58, sy + 0.006, -1.41],
-      [-0.44, 0.68, -1.43],
-      [0.34, 0.66, -1.43],
-      [0.39, 0.34, -1.42],
-      [0.38, 0.13, -1.35],
+      [-0.60, sy + 0.22, -1.185],
+      [-0.60, sy + 0.10, -1.202],
+      [-0.59, sy + 0.007, -1.295],
+      [-0.58, sy + 0.005, -1.368],
+      [-0.56, sy + 0.003, -1.414],
+      [-0.52, 0.716, -1.428],
+      [-0.20, 0.675, -1.430],
+      [0.34, 0.655, -1.430],
+      [0.388, 0.340, -1.424],
+      [0.380, 0.130, -1.350],
       isoPt(-0.039, 0.016),
     ], 0.0044);
-    // 5. Anglepoise desk lamp cord (tucked cleanly under rear beam -> joins spine -> Bank 1 rear)
+
+    // 5. Anglepoise desk lamp cord — exits flush from rear of lamp base (-1.22, sy+0.007, -1.132), clears rear desk edge cleanly!
     addAcCord([
-      [-1.22, sy + 0.006, -1.16],
-      [-1.20, sy + 0.006, -1.41],
-      [-1.08, 0.68, -1.43],
-      [0.32, 0.67, -1.44],
-      [0.38, 0.32, -1.43],
-      [0.37, 0.12, -1.38],
+      [-1.22, sy + 0.007, -1.132],
+      [-1.215, sy + 0.005, -1.260],
+      [-1.21, sy + 0.005, -1.368],
+      [-1.20, sy + 0.002, -1.414],
+      [-1.16, 0.716, -1.428],
+      [-0.60, 0.680, -1.434],
+      [0.32, 0.668, -1.436],
+      [0.376, 0.320, -1.428],
+      [0.368, 0.122, -1.380],
       isoPt(-0.039, -0.018),
     ], 0.0036);
-    // 6. Tripp Lite ISOBAR8ULTRA heavy-duty 12 ft main power cord routing cleanly straight BACKWARD to the wall duplex outlet directly behind the desk!
-    const cordStart = isoPt(-0.130, 0.0);
-    cordStart[1] = isoY + 0.024;
+
+    // 6. Tripp Lite ISOBAR8ULTRA heavy-duty 12 ft main power cord routing cleanly along floor to the flush wall duplex outlet!
+    const cordStart = isoPt(-0.128, 0.0);
+    cordStart[1] = isoY + 0.025;
     addAcCord([
       cordStart,
-      [isoX - 0.17, 0.021, isoZ - 0.06],
-      [isoX - 0.14, 0.020, -1.62],
-      [0.44, 0.020, -2.18],
-      [0.48, 0.024, -2.51],
-      [0.48, 0.165, -2.535],
+      [isoX - 0.165, 0.022, isoZ - 0.055],
+      [isoX - 0.140, 0.021, -1.62],
+      [0.44, 0.021, -2.18],
+      [0.48, 0.024, -2.545],
+      [0.48, 0.165, -2.572],
     ], 0.0062, false);
-    // Crisp wall duplex AC outlet plate + seated right-angle black NEMA plug directly behind the desk!
+    // Crisp wall duplex AC outlet plate seated FLUSH against back wall (z = -2.600) + seated right-angle black NEMA plug!
     const wallOutlet = new THREE.Mesh(
       new RoundedBoxGeometry(0.072, 0.114, 0.010, 2, 0.002),
       new THREE.MeshStandardMaterial({ color: 0xe2dcd2, roughness: 0.65 })
     );
-    wallOutlet.position.set(0.48, 0.18, -2.56);
+    wallOutlet.position.set(0.48, 0.18, -2.594);
     deskGroup.add(wallOutlet);
     const wallPlug = new THREE.Mesh(
       new RoundedBoxGeometry(0.026, 0.030, 0.024, 2, 0.004),
       acPlugMat
     );
-    wallPlug.position.set(0.48, 0.165, -2.544);
+    wallPlug.position.set(0.48, 0.165, -2.578);
     deskGroup.add(wallPlug);
 
     this._loadGLB('assets/models/anglepoise_lamp.glb', (lamp) => {
@@ -2703,23 +2778,30 @@ export class OfficeScene {
         const portX = stackX - (sub === 0 ? 0.042 : 0.060);
         const pEnd = new THREE.Vector3(portX, nodeY, stackZ - 0.077);
 
-        // Stay flat on desk beside stack -> sweep visibly up a tidy zip-tied vertical harness hugging the back-left corner of the DGX stack up to Nodes 1–8!
+        // Flat along desk beside stack -> crisp centripetal vertical zip-tied harness strictly BEHIND back-left corner (z <= -1.170 -> ZERO chassis or desk clipping!)
         const laneX = 0.168 + p * 0.009 + sub * 0.0042;
         const deskY = sy + 0.0046 + sub * 0.0010;
-        const spineX = stackX - 0.098 + (sub * 0.005);
-        const spineZ = stackZ - 0.066 - p * 0.004;
-        const leadCurve = new THREE.CatmullRomCurve3([
+        const spineX = stackX - 0.095 + (sub * 0.005);
+        const spineZ = stackZ - 0.090 - p * 0.004;
+        const leadPts = [
           splitPos,
           new THREE.Vector3(laneX, deskY, splitZ - 0.045),
-          new THREE.Vector3(laneX + 0.008, deskY, stackZ + 0.02),
-          new THREE.Vector3(spineX - 0.004, deskY + 0.003, stackZ - 0.044),
-          new THREE.Vector3(spineX, Math.max(deskY + 0.008, nodeY - 0.008), spineZ),
-          new THREE.Vector3(portX, nodeY, spineZ - 0.022),
-          pEnd,
-        ]);
+          new THREE.Vector3(laneX + 0.008, deskY, stackZ + 0.01),
+          new THREE.Vector3(spineX - 0.004, deskY + 0.003, stackZ - 0.068),
+          new THREE.Vector3(spineX, deskY + 0.016, spineZ),
+        ];
+        if (nodeIdx >= 3) {
+          leadPts.push(new THREE.Vector3(spineX, sy + (nodeY - sy) * 0.52, spineZ));
+        }
+        leadPts.push(
+          new THREE.Vector3(spineX, Math.max(deskY + 0.018, nodeY - 0.008), spineZ),
+          new THREE.Vector3(portX, nodeY, spineZ - 0.012),
+          pEnd
+        );
+        const leadCurve = new THREE.CatmullRomCurve3(leadPts, false, 'centripetal', 0.5);
 
         const cableMesh = new THREE.Mesh(
-          new THREE.TubeGeometry(leadCurve, 56, 0.0029, 10, false),
+          new THREE.TubeGeometry(leadCurve, 64, 0.0029, 10, false),
           dacMats[sub]
         );
         cableMesh.castShadow = true;
@@ -2729,6 +2811,13 @@ export class OfficeScene {
         boot.position.copy(pEnd).add(new THREE.Vector3(0, 0, -0.006));
         deskCluster.add(boot);
       }
+    }
+    // Three tidy matte-black velcro cable straps binding the vertical DAC spine behind the DGX stack
+    const strapMat = new THREE.MeshStandardMaterial({ color: 0x101318, roughness: 0.85 });
+    for (const strapY of [sy + 0.08, sy + 0.21, sy + 0.34]) {
+      const strap = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.010, 14), strapMat);
+      strap.position.set(stackX - 0.093, strapY, stackZ - 0.096);
+      deskCluster.add(strap);
     }
 
     // Brushed-black circular aluminum desk cable grommet flush-mounted behind the CRS804 (gives yellow 10GbE uplink a real physical destination!)
@@ -2746,7 +2835,7 @@ export class OfficeScene {
     gromHole.position.copy(gromPos);
     deskCluster.add(gromHole);
 
-    // Yellow 10GbE Cat6a management uplink cable resting flush on desk (satin PVC sheen, zero stiffness or floating!)
+    // Yellow 10GbE Cat6a management uplink cable resting flush on desk -> drops through grommet -> tucks under rear desk beam to wall Ethernet jack!
     const eth1Pos = new THREE.Vector3(swX - 0.012, sy + 0.022, swZ + 0.197);
     const uplinkCurve = new THREE.CatmullRomCurve3([
       eth1Pos,
@@ -2754,15 +2843,34 @@ export class OfficeScene {
       new THREE.Vector3(swX - 0.146, sy + 0.0042, swZ + 0.224),
       new THREE.Vector3(swX - 0.160, sy + 0.0036, swZ + 0.16),
       new THREE.Vector3(swX - 0.160, sy + 0.0036, swZ - 0.08),
-      new THREE.Vector3(swX - 0.160, sy + 0.0048, -1.24),
-      new THREE.Vector3(swX - 0.160, sy - 0.018, -1.28),
-    ]);
+      new THREE.Vector3(swX - 0.160, sy + 0.0048, -1.255),
+      new THREE.Vector3(swX - 0.160, sy - 0.055, -1.280),
+      new THREE.Vector3(swX - 0.160, 0.680, -1.430),
+      new THREE.Vector3(0.35, 0.665, -1.435),
+      new THREE.Vector3(0.36, 0.26, -1.440),
+      new THREE.Vector3(0.36, 0.022, -1.520),
+      new THREE.Vector3(0.36, 0.022, -2.545),
+      new THREE.Vector3(0.36, 0.175, -2.578),
+    ], false, 'centripetal', 0.5);
     const uplinkMesh = new THREE.Mesh(
-      new THREE.TubeGeometry(uplinkCurve, 56, 0.0029, 12, false),
+      new THREE.TubeGeometry(uplinkCurve, 96, 0.0029, 12, false),
       new THREE.MeshStandardMaterial({ color: 0xdca432, roughness: 0.34, metalness: 0.06 })
     );
     uplinkMesh.castShadow = true;
     deskCluster.add(uplinkMesh);
+    // Flush RJ45 Ethernet wall keystone jack plate tucked neatly beside the AC wall outlet!
+    const ethWallPlate = new THREE.Mesh(
+      new RoundedBoxGeometry(0.072, 0.114, 0.010, 2, 0.002),
+      new THREE.MeshStandardMaterial({ color: 0xe2dcd2, roughness: 0.65 })
+    );
+    ethWallPlate.position.set(0.36, 0.18, -2.594);
+    deskCluster.add(ethWallPlate);
+    const ethWallPlug = new THREE.Mesh(
+      new RoundedBoxGeometry(0.014, 0.014, 0.020, 2, 0.002),
+      new THREE.MeshStandardMaterial({ color: 0xdca432, roughness: 0.38 })
+    );
+    ethWallPlug.position.set(0.36, 0.175, -2.582);
+    deskCluster.add(ethWallPlug);
 
     this.scene.add(deskCluster);
 
