@@ -4,17 +4,35 @@ An interactive Three.js 3D office experience showcasing live, voice-narrated [Ov
 
 **Live Site:** https://jaher.github.io/wargames-office-3d/
 
-![Wargames Office 3D — Interactive 3D office workstation with Omarchy Linux monitor, Corsair RTX 5090 PC, and 8× NVIDIA DGX Spark cluster](readme-hero.png)
+![Wargames Office 3D — Wide office overview at Golden Hour](readme-hero.png)
+
+## Screenshots
+
+### Omarchy Linux Monitor & Voice-Narrated Terminal
+![Omarchy Linux 34-inch ultrawide monitor with synced OverTheWire terminal and voice narration transcript](docs/screenshots/monitor-terminal.png)
+
+### Compute Cluster, comma.ai Chestnut + RTX 3090 FE, Lava Lamp & Corsair RTX 5090 PC
+![Close-up of the comma.ai Chestnut USB4 eGPU with NVIDIA RTX 3090 FE, Mathmos Astro lava lamp, 6× NVIDIA DGX Spark + 2× ASUS GX10 stack, MikroTik CRS804 switch, Meta Ray-Ban Display glasses & Neural Band, and Corsair 5000D Airflow RTX 5090 rig](docs/screenshots/hardware-cluster.png)
+
+### Desk Peripherals & Corsair K70 PRO TKL
+![Close-up of the Corsair K70 PRO TKL aluminum mechanical keyboard, Corsair M75 wireless mouse, Anglepoise brass desk lamp, and MikroTik CRS804 switch](docs/screenshots/desk-peripherals.png)
+
+### Panoramic Window Vista — Twilight City
+![Panoramic San Francisco Bay Bridge skyline view at Twilight City through walnut window mullions with the Google Nest Learning Thermostat on the right pier](docs/screenshots/window-twilight.png)
+
+### Classic CS & Springer Mathematics Bookshelf
+![Five-shelf bookcase stocked with Knuth's The Art of Computer Programming, classic Computer Architecture & Operating Systems texts, and Springer GTM, UTM, and SUMS mathematics series](docs/screenshots/bookshelf-cs.png)
 
 ## Features
 
-- **Realistic 3D Office Interior** — Hardwood oak flooring, woven area rug, Uplift V2 walnut desk, Blender-modeled Herman Miller Aeron chair, Keychron Q1 Pro 75% CNC aluminum mechanical keyboard, Logitech MX Master 3S ergonomic mouse, Anglepoise Type 75 desk lamp, organic Fiddle-Leaf Fig & Sansevieria plants, cloth-bound books, pleated linen window curtains, and live physically-based Three.js lighting and soft shadows.
-- **Photorealistic Panoramic Window View** — Large walnut-mullioned window overlooking high-resolution photographic metropolitan vistas (San Francisco Bay Bridge Golden Hour, Twilight Harbor Skyline, and Morning Light) mapped onto a curved panoramic cyclorama with switchable live lighting moods (*Golden Hour*, *Twilight City*, *Morning Light*).
-- **Corsair 5000D Airflow + RTX 5090 Founders Edition** — Accurate Blender-modeled Corsair 5000D Airflow mid-tower with triangular-perforated front/top mesh, crystal-clear tempered glass side panel, Corsair iCUE LINK LCD liquid cooler, 4× Vengeance DDR5 RGB sticks, and a true 2-slot **NVIDIA GeForce RTX 5090 Founders Edition** clearly labelled inside the chassis.
-- **8× NVIDIA DGX Spark Cluster & MikroTik CRS804-4DDQ-hRM** — Positioned right on the desk alongside the monitor: a stack of 8 accurately proportioned (`150 × 150 × 50.5 mm`) champagne-gold anodized **NVIDIA DGX Spark** machines with porous gold metal-foam front/rear grilles and full rear I/O, linked via 4× 400G-to-2×200GbE QSFP-DD breakout DAC cables to a half-width 1U **MikroTik CRS804-4DDQ-hRM** switch with 4× 400G QSFP56-DD cages, 2× 10GbE RJ45, serial console, and live status LEDs.
-- **Live Omarchy Linux Monitor** — Dell UltraSharp 34" monitor rendering an authentic **Omarchy Linux** (Arch + Hyprland borderless tiling + Tokyo Night Waybar + Alacritty/Ghostty + `fastfetch` + `btop`) desktop whose terminal updates in real time as you navigate wargames and levels.
-- **Synced Voice Narration & Transcript** — Pick any mission and level from the dropdown selectors to replay commands, listen to synchronized voice narration audio, scrub the timeline, and click any transcript line to jump directly to that moment.
-- **No Passwords Exposed** — OverTheWire level passwords are never rendered anywhere in the terminal, transcript, or 3D monitor.
+- **Realistic 3D Office Interior** — Hardwood oak flooring, woven area rug, Uplift V2 walnut desk, Herman Miller Aeron chair, **Corsair K70 PRO TKL** aluminum mechanical keyboard with accurate ANSI layout and rotary dial, **Corsair M75** wireless mouse, **Meta Ray-Ban Display** smart glasses & **Meta Neural Band**, Anglepoise Type 75 brass desk lamp, **Mathmos Astro Classic** animated lava lamp, **Google Nest Learning Thermostat (3rd Gen)** on the wall, 5-shelf **Classic CS & Springer Math Bookshelf** (Knuth TAOCP Vol. 1–4B, Computer Architecture, OS, Springer GTM/UTM/SUMS), organic Fiddle-Leaf Fig & Sansevieria plants, pleated linen window curtains, and live physically-based Three.js lighting and soft shadows.
+- **Photorealistic Panoramic Window View** — Large walnut-mullioned window overlooking high-resolution photographic metropolitan vistas (San Francisco Bay Bridge Golden Hour, Twilight Harbor Skyline, and Morning Light) mapped onto a wide curved panoramic cyclorama with switchable live lighting moods (*Golden Hour*, *Twilight City*, *Morning Light*).
+- **Corsair 5000D Airflow + RTX 5090 Founders Edition** — Accurate Blender-modeled Corsair 5000D Airflow mid-tower with triangular-perforated front/top mesh, crystal-clear tempered glass side panel, Corsair iCUE LINK LCD liquid cooler, 4× Vengeance DDR5 RGB sticks, live spinning fans, and a true 2-slot **NVIDIA GeForce RTX 5090 Founders Edition** inside the chassis.
+- **comma.ai Chestnut USB4 eGPU + NVIDIA GeForce RTX 3090 Founders Edition** — Open-air CNC matte-black aluminum dock with exposed `comma.ai CHESTNUT` PCB on brass standoffs, yellow XT60i 12V power input, USB4 Type-C host link, and a 3-slot **NVIDIA GeForce RTX 3090 Founders Edition** with brushed titanium X-frame, illuminated `GEFORCE RTX` top spine, and dual spinning push-pull axial fans.
+- **6× NVIDIA DGX Spark + 2× ASUS Ascent GX10 Cluster & MikroTik CRS804-4DDQ-hRM** — Positioned right on the desk alongside the monitor: 8 GB10 compute nodes wired via 4× 400G-to-2×200GbE QSFP-DD breakout DAC cables to a half-width 1U **MikroTik CRS804-4DDQ-hRM** switch with 4× 400G QSFP56-DD cages, 2× 10GbE RJ45, serial console, and live status LEDs.
+- **Live Omarchy Linux Monitor** — Curved 34" Dell UltraSharp U3425WE monitor rendering an authentic **Omarchy Linux** (Arch + Hyprland borderless tiling + Tokyo Night Waybar + Ghostty + Neovim + `fastfetch` + `btop++`) desktop whose terminal updates in real time as you navigate wargames and levels.
+- **Full-Scene Loading Preamble & Synced Voice Narration** — Holds a full-viewport progress preamble until every 3D model, skyline panorama, solution set, and narration track is loaded, with voice narration enabled by default, interactive timeline scrubbing, and clickable transcript seeking.
+- **No Passwords Exposed** — OverTheWire and SmashTheStack level passwords are never rendered anywhere in the terminal, transcript, or 3D monitor.
 
 ## Controls
 
