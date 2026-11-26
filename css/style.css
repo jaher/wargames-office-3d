@@ -258,7 +258,8 @@ html, body {
   border-left: 1px solid var(--border);
   box-shadow: -12px 0 36px rgba(0, 0, 0, 0.45);
   z-index: 15;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   transition: width 0.25s ease, padding 0.25s ease, opacity 0.2s ease;
 }
 
@@ -268,6 +269,7 @@ html, body {
   padding-right: 0;
   border-left: 0;
   opacity: 0;
+  overflow: hidden;
   pointer-events: none;
 }
 
@@ -489,8 +491,8 @@ html, body {
 
 /* Terminal Shell */
 .term-shell {
-  flex: 1 1 auto;
-  min-height: 180px;
+  flex: 1 1 160px;
+  min-height: 120px;
   display: flex;
   flex-direction: column;
   border-radius: 9px;
@@ -723,8 +725,22 @@ html, body {
   text-decoration: underline;
 }
 
+/* Compact desktop heights (e.g. 1280x720 browser windows) keep all narration UI unclipped */
+@media (max-height: 760px) {
+  .side-panel {
+    gap: 7px;
+    padding: 10px 13px 10px;
+  }
+  .term-shell {
+    min-height: 105px;
+  }
+  .transcript-wrap {
+    max-height: 130px;
+  }
+}
+
 /* Responsive — small screens & phones prioritize the full-screen 3D environment */
-@media (max-width: 960px), (max-height: 640px) {
+@media (max-width: 960px), (max-height: 500px) {
   .app {
     position: relative;
     width: 100vw;

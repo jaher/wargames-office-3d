@@ -194,7 +194,7 @@ export class SolutionsController {
     };
 
     narrBtn.onclick = () => {
-      if (!this.narrMap) return;
+      if (!this.narrMap || !this.narrMap.audio) return;
       if (this.narrOn && !this.narrAutoplayBlocked) {
         this.narrOn = false;
         this.narrFF = false;
@@ -214,12 +214,14 @@ export class SolutionsController {
       playBtn.textContent = '‖ Pause';
       this._setNarrBtnText();
       this.narrAudio.currentTime = 0;
-      void this.playLevel(this.cur);
+      if (!this.narrMap.unsynced) {
+        void this.playLevel(this.cur);
+      }
       this._tryStartNarrAudio();
     };
 
     narrPlayPause.onclick = () => {
-      if (!this.narrMap) return;
+      if (!this.narrMap || !this.narrMap.audio) return;
       if (!this.narrOn || this.narrAutoplayBlocked) {
         narrBtn.click();
         return;
@@ -235,13 +237,13 @@ export class SolutionsController {
     };
 
     narrSeek.addEventListener('input', () => {
-      if (!this.narrMap) return;
+      if (!this.narrMap || !this.narrMap.audio) return;
       this.narrAudio.currentTime = parseFloat(narrSeek.value);
       this._narrHighlight();
     });
 
     narrSeek.addEventListener('change', () => {
-      if (!this.narrOn || !this.narrMap) return;
+      if (!this.narrOn || !this.narrMap || this.narrMap.unsynced) return;
       this.narrFF = true;
       this.playLevel(this.cur);
     });
@@ -263,6 +265,7 @@ export class SolutionsController {
       this._emitScreen();
     });
     this.narrAudio.addEventListener('error', () => {
+      if (!this.narrAudio.getAttribute('src')) return;
       // Never let a missing/failed narration audio file stall terminal playback
       this.narrAutoplayBlocked = true;
       this.narrOn = false;
@@ -387,8 +390,12 @@ export class SolutionsController {
     if (this._gameFetchPromises.has(key)) {
       return this._gameFetchPromises.get(key);
     }
-    const p = fetch(`${SUBMODULE_BASE}/games/${key}.json`)
-      .then((r) => (r.ok ? r.json() : null))
+    const p = (key === 'bandit'
+      ? fetch(`${SUBMODULE_BASE}/index.html`)
+          .then((r) => (r.ok ? r.text() : null))
+          .then((html) => (html ? parseBanditFromIndexHtml(html) : null))
+      : fetch(`${SUBMODULE_BASE}/games/${key}.json`).then((r) => (r.ok ? r.json() : null))
+    )
       .then((data) => {
         if (!data || !this.games[key]) return;
         this.games[key].host = this.games[key].host || data.host;
@@ -405,18 +412,20 @@ export class SolutionsController {
   }
 
   async init() {
-    const [banditHtml, manifestRes] = await Promise.all([
-      fetch(`${SUBMODULE_BASE}/index.html`).then((r) => (r.ok ? r.text() : null)).catch(() => null),
-      fetch(`${SUBMODULE_BASE}/games/manifest.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-    ]);
+    // Register Bandit stub immediately; hydrate its HTML in parallel so the initial
+    // mission (Vortex) and its narration UI appear without waiting on Bandit's 156 KB HTML.
+    this.games.bandit = {
+      title: 'Bandit',
+      host: 'bandit.labs.overthewire.org',
+      levels: [],
+      goals: {},
+      _loaded: false,
+    };
 
-    if (banditHtml) {
-      const bandit = parseBanditFromIndexHtml(banditHtml);
-      if (bandit) {
-        bandit._loaded = true;
-        this.games.bandit = bandit;
-      }
-    }
+    const [manifestRes, vortexRes] = await Promise.all([
+      fetch(`${SUBMODULE_BASE}/games/manifest.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`${SUBMODULE_BASE}/games/vortex.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]);
 
     if (manifestRes && Array.isArray(manifestRes.games)) {
       for (const g of manifestRes.games) {
@@ -430,6 +439,13 @@ export class SolutionsController {
           };
         }
       }
+    }
+
+    if (vortexRes && this.games.vortex) {
+      this.games.vortex.host = this.games.vortex.host || vortexRes.host;
+      this.games.vortex.levels = vortexRes.levels || [];
+      this.games.vortex.goals = vortexRes.goals || {};
+      this.games.vortex._loaded = true;
     }
 
     if (this.games.vortex && !this.userPickedGame) {
@@ -446,13 +462,12 @@ export class SolutionsController {
     // Fire level playback asynchronously — NEVER await the full level loop during init!
     void this.playLevel(0);
 
-    // Hydrate remaining games in the background so dropdown level counts fill in smoothly
+    // Hydrate Bandit + remaining games in the background so dropdown level counts fill in smoothly
     // without disrupting any mission/level the user already chose.
-    if (manifestRes && Array.isArray(manifestRes.games)) {
-      Promise.all(manifestRes.games.map((g) => this._ensureGameLoaded(g.key))).then(() => {
-        this._refreshGameOptionLabels();
-      });
-    }
+    const allKeys = Object.keys(this.games);
+    Promise.all(allKeys.map((k) => this._ensureGameLoaded(k))).then(() => {
+      this._refreshGameOptionLabels();
+    });
   }
 
   curGame() {
@@ -689,20 +704,22 @@ export class SolutionsController {
       d.className = 'narr-seg';
       d.dataset.seg = String(i);
       d.textContent = this.redactText(sg.text);
-      d.onclick = () => {
-        if (!this.narrMap) return;
-        if (!this.narrOn) {
-          this.narrOn = true;
-          this._setNarrPref(false);
-          this._setNarrBtnText();
-        }
-        this.playing = true;
-        this.dom.playBtn.textContent = '‖ Pause';
-        this.narrAudio.currentTime = sg.start;
-        this.narrFF = true;
-        this._tryStartNarrAudio();
-        this.playLevel(this.cur);
-      };
+      if (map.audio && !map.unsynced && typeof sg.start === 'number') {
+        d.onclick = () => {
+          if (!this.narrMap) return;
+          if (!this.narrOn) {
+            this.narrOn = true;
+            this._setNarrPref(false);
+            this._setNarrBtnText();
+          }
+          this.playing = true;
+          this.dom.playBtn.textContent = '‖ Pause';
+          this.narrAudio.currentTime = sg.start;
+          this.narrFF = true;
+          this._tryStartNarrAudio();
+          this.playLevel(this.cur);
+        };
+      }
       narrTranscript.appendChild(d);
     });
   }
@@ -717,6 +734,7 @@ export class SolutionsController {
     this.narrAutoplayBlocked = false;
     this.activeNarrSeg = -1;
     this.narrAudio.pause();
+    this.narrAudio.removeAttribute('src');
     this.dom.narrBtn.style.display = 'none';
     this.dom.narrBar.classList.remove('on');
     this.dom.transcriptWrap.style.display = 'none';
@@ -725,25 +743,61 @@ export class SolutionsController {
     this._setNarrBtnText();
 
     try {
-      const r = await fetch(`${SUBMODULE_BASE}/narration/${game}/L${lvl}.sync.json`, { cache: 'no-store' });
-      if (!r.ok || tok !== this.narrLoadTok) return false;
-      const map = await r.json();
+      let map = null;
+      const syncRes = await fetch(`${SUBMODULE_BASE}/narration/${game}/L${lvl}.sync.json`, { cache: 'no-store' });
       if (tok !== this.narrLoadTok) return false;
+
+      if (syncRes.ok) {
+        map = await syncRes.json();
+        if (tok !== this.narrLoadTok) return false;
+      } else {
+        // Fallback for levels that have audio (.mp3) and/or script (.txt) without a .sync.json
+        const mp3Url = `${SUBMODULE_BASE}/narration/${game}/L${lvl}.mp3`;
+        const txtUrl = `${SUBMODULE_BASE}/narration/${game}/L${lvl}.txt`;
+        const [mp3Ok, txtText] = await Promise.all([
+          fetch(mp3Url, { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok).catch(() => false),
+          fetch(txtUrl, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : null)).catch(() => null),
+        ]);
+        if (tok !== this.narrLoadTok) return false;
+        if (!mp3Ok && !txtText) return false;
+
+        const paras = txtText
+          ? txtText.split(/\n\s*\n+/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean)
+          : [];
+        map = {
+          game,
+          level: lvl,
+          audio: mp3Ok ? `narration/${game}/L${lvl}.mp3` : null,
+          unsynced: true,
+          segments: paras.map((text, id) => ({ id, text })),
+        };
+      }
 
       this.narrMap = map;
       this.narrGame = game;
       this.narrLevel = lvl;
-      this._buildNarrSchedule(map);
+      if (!map.unsynced) {
+        this._buildNarrSchedule(map);
+      } else {
+        this.narrLineTime = new Map();
+        this.narrKeySegs = new Map();
+      }
 
-      const audioPath = String(map.audio || `narration/${game}/L${lvl}.mp3`).replace(/^\/+/, '');
-      this.narrAudio.src = `${SUBMODULE_BASE}/${audioPath}`;
-      this.dom.narrBtn.style.display = '';
-      this.dom.narrBar.classList.add('on');
-      this._buildNarrTranscript(map);
-      this.dom.transcriptWrap.style.display = '';
-      this._setNarrTime();
+      if (map.audio) {
+        const audioPath = String(map.audio).replace(/^\/+/, '');
+        this.narrAudio.src = `${SUBMODULE_BASE}/${audioPath}`;
+        this.dom.narrBtn.style.display = '';
+        this.dom.narrBar.classList.add('on');
+        this._setNarrTime();
+      }
 
-      this.narrOn = !this._narrPrefOff();
+      if (map.segments && map.segments.length) {
+        this._buildNarrTranscript(map);
+        this.dom.transcriptWrap.style.display = '';
+        this.dom.narrSeg.textContent = this.redactText(map.segments[0].text);
+      }
+
+      this.narrOn = Boolean(map.audio) && !this._narrPrefOff();
       this._setNarrBtnText();
       this._syncAudioButtons();
       return true;
@@ -773,7 +827,7 @@ export class SolutionsController {
   }
 
   _narrHighlight() {
-    if (!this.narrMap) return;
+    if (!this.narrMap || this.narrMap.unsynced) return;
     const t = this.narrAudio.currentTime || 0;
     let active = -1;
     (this.narrMap.segments || []).forEach((sg, i) => {

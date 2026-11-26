@@ -78,7 +78,7 @@ function bootstrap() {
       }
       setActiveCamButton(dom.camButtons, qsCam);
     }
-    const smallViewportMq = window.matchMedia('(max-width: 960px), (max-height: 640px)');
+    const smallViewportMq = window.matchMedia('(max-width: 960px), (max-height: 500px)');
     const qsPanel = qs.get('panel');
     const shouldStartCollapsed = qsPanel === '0' || (qsPanel !== '1' && smallViewportMq.matches);
     if (shouldStartCollapsed) {
@@ -150,7 +150,7 @@ function bootstrap() {
       setPanelCollapsed(true);
     });
   }
-  const smallMq = window.matchMedia('(max-width: 960px), (max-height: 640px)');
+  const smallMq = window.matchMedia('(max-width: 960px), (max-height: 500px)');
   smallMq.addEventListener('change', (ev) => {
     if (ev.matches && !userToggledPanel) {
       setPanelCollapsed(true);
