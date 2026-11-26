@@ -243,7 +243,7 @@ def test_live_scene_window_and_assets(port):
         assert preamble["overlayHidden"], f"Overlay still visible after __officeReady: {preamble}"
         assert stats["pending"] == 0, f"Revealed scene while assets still pending: {stats}"
         assert len(stats["failed"]) == 0, f"Failed 3D assets: {stats['failed']}"
-        assert len(stats["loaded"]) >= 26, f"Too few assets loaded: {len(stats['loaded'])}"
+        assert len(stats["loaded"]) >= 27, f"Too few assets loaded: {len(stats['loaded'])}"
         assert cdp.eval("Boolean(window.__blueAngelsActive)"), "Blue Angels airshow did not initialize"
         # Exhaustively verify 100% smooth, continuous Blue Angels trajectories across the full closed cycle
         # (ZERO teleports, jumps, orientation flips, or window/cyclorama clipping!) + live Web Audio engine

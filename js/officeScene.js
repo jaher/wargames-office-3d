@@ -309,7 +309,7 @@ function createWoodPBR({
   };
 }
 
-// Tactile matte architectural Venetian/limewash plaster (multi-scale organic mottling + fine mineral grain!)
+// Smooth, 100% seamlessly tileable architectural matte plaster (ZERO rectangular tile seams or faceted noise!)
 function createPlasterPBR(baseHex = '#ddd2c0', seed = 71) {
   const size = 512;
   const colC = document.createElement('canvas');
@@ -325,47 +325,51 @@ function createPlasterPBR(baseHex = '#ddd2c0', seed = 71) {
   bctx.fillStyle = 'rgb(128,128,128)';
   bctx.fillRect(0, 0, size, size);
 
-  // Soft broad limewash trowel clouds (architectural tonal richness, zero flat CG look!)
-  for (let i = 0; i < 64; i++) {
+  // Ultra-soft toroidally wrapped plaster tonal clouds (drawn across all 9 wrap offsets -> ZERO tile edge seams!)
+  for (let i = 0; i < 42; i++) {
     const x = rng() * size;
     const y = rng() * size;
-    const r = 48 + rng() * 115;
+    const r = 64 + rng() * 110;
     const bright = rng() > 0.48;
-    const g = ctx.createRadialGradient(x, y, 4, x, y, r);
-    g.addColorStop(0, bright ? 'rgba(255, 246, 232, 0.075)' : 'rgba(68, 48, 34, 0.085)');
-    g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, size, size);
+    for (const ox of [-size, 0, size]) {
+      for (const oy of [-size, 0, size]) {
+        const cx = x + ox;
+        const cy = y + oy;
+        if (cx + r < 0 || cx - r > size || cy + r < 0 || cy - r > size) continue;
+        const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, r);
+        g.addColorStop(0, bright ? 'rgba(255, 248, 236, 0.032)' : 'rgba(72, 54, 40, 0.035)');
+        g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, size, size);
 
-    const bg = bctx.createRadialGradient(x, y, 4, x, y, r);
-    bg.addColorStop(0, bright ? 'rgba(170,170,170,0.12)' : 'rgba(90,90,90,0.12)');
-    bg.addColorStop(1, 'rgba(128,128,128,0)');
-    bctx.fillStyle = bg;
-    bctx.fillRect(0, 0, size, size);
+        const bg = bctx.createRadialGradient(cx, cy, 4, cx, cy, r);
+        bg.addColorStop(0, bright ? 'rgba(138,138,138,0.06)' : 'rgba(118,118,118,0.06)');
+        bg.addColorStop(1, 'rgba(128,128,128,0)');
+        bctx.fillStyle = bg;
+        bctx.fillRect(0, 0, size, size);
+      }
+    }
   }
-  // Fine subtle plaster aggregate grain
+
+  // Ultra-fine smooth architectural eggshell mineral finish (eliminates gritty dFdx/dFdy bump faceting!)
   const imgCol = ctx.getImageData(0, 0, size, size);
-  const imgBmp = bctx.getImageData(0, 0, size, size);
   for (let i = 0; i < size * size; i++) {
-    const n = (rng() - 0.5) * 10;
+    const n = (rng() - 0.5) * 3.0;
     const idx = i * 4;
     imgCol.data[idx] = THREE.MathUtils.clamp(imgCol.data[idx] + n, 0, 255);
     imgCol.data[idx + 1] = THREE.MathUtils.clamp(imgCol.data[idx + 1] + n, 0, 255);
     imgCol.data[idx + 2] = THREE.MathUtils.clamp(imgCol.data[idx + 2] + n, 0, 255);
-    const bv = THREE.MathUtils.clamp(imgBmp.data[idx] + n * 2.4, 0, 255);
-    imgBmp.data[idx] = imgBmp.data[idx + 1] = imgBmp.data[idx + 2] = bv;
   }
   ctx.putImageData(imgCol, 0, 0);
-  bctx.putImageData(imgBmp, 0, 0);
 
   const map = new THREE.CanvasTexture(colC);
   map.colorSpace = THREE.SRGBColorSpace;
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
-  map.repeat.set(2.5, 1.5);
+  map.repeat.set(2, 1);
   map.anisotropy = 8;
   const bumpMap = new THREE.CanvasTexture(bmpC);
   bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
-  bumpMap.repeat.set(3, 2);
+  bumpMap.repeat.set(2, 1);
   return { map, bumpMap };
 }
 
@@ -1541,49 +1545,108 @@ export class OfficeScene {
     floor.receiveShadow = true;
     this.scene.add(floor);
 
+    // Authentic Antique Hand-Knotted Persian Kashan/Tabriz Wool Rug (3.38 x 2.38 m) with woven knot pile bump & cotton fringe!
     const rugPBR = createRugPBR();
-    const rugMat = new THREE.MeshStandardMaterial({
-      map: rugPBR.map,
+    const rugBackingMat = new THREE.MeshStandardMaterial({
+      color: 0x3a1c1a,
       bumpMap: rugPBR.bumpMap,
-      bumpScale: 0.016,
+      bumpScale: 0.008,
       roughness: 0.94,
+      metalness: 0.0,
+      envMapIntensity: 0.12,
     });
-    const rug = new THREE.Mesh(new RoundedBoxGeometry(3.38, 0.016, 2.38, 2, 0.005), rugMat);
-    rug.position.set(-0.14, 0.0085, -0.35);
-    rug.receiveShadow = true;
-    this.scene.add(rug);
-    this._addContactShadow(this.scene, -0.14, 0.0014, -0.35, 3.54, 2.54, 0.52);
+    const rugBase = new THREE.Mesh(new RoundedBoxGeometry(3.38, 0.015, 2.38, 2, 0.005), rugBackingMat);
+    rugBase.position.set(-0.14, 0.0080, -0.35);
+    rugBase.receiveShadow = true;
+    this.scene.add(rugBase);
 
-    // Warm matte architectural Venetian plaster walls with tactile limewash bump & corner AO depth!
+    const persianMat = new THREE.MeshStandardMaterial({
+      color: 0xebe4da,
+      bumpMap: rugPBR.bumpMap,
+      bumpScale: 0.009,
+      roughness: 0.93,
+      metalness: 0.0,
+      envMapIntensity: 0.14,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
+    const persianTex = this._loadTrackedTexture('assets/textures/persian_rug.jpg', (tex) => {
+      persianMat.map = tex;
+      persianMat.needsUpdate = true;
+    });
+    persianMat.map = persianTex;
+
+    const rugTop = new THREE.Mesh(new THREE.PlaneGeometry(3.36, 2.36), persianMat);
+    rugTop.rotation.x = -Math.PI / 2;
+    rugTop.position.set(-0.14, 0.0158, -0.35);
+    rugTop.receiveShadow = true;
+    this.scene.add(rugTop);
+
+    // Delicate hand-tied ivory cotton fringe along the left and right short ends of the Persian carpet
+    const fringeC = document.createElement('canvas');
+    fringeC.width = 64;
+    fringeC.height = 512;
+    const fctx = fringeC.getContext('2d');
+    const frng = mulberry32(314);
+    fctx.clearRect(0, 0, 64, 512);
+    for (let y = 0; y < 512; y += 3) {
+      const len = 42 + frng() * 18;
+      const shade = Math.round(205 + frng() * 28);
+      fctx.fillStyle = `rgba(${shade}, ${shade - 10}, ${shade - 26}, ${0.78 + frng() * 0.2})`;
+      fctx.fillRect(0, y, len, 1.8);
+    }
+    const fringeTex = new THREE.CanvasTexture(fringeC);
+    fringeTex.colorSpace = THREE.SRGBColorSpace;
+    const fringeMat = new THREE.MeshStandardMaterial({
+      map: fringeTex,
+      transparent: true,
+      alphaTest: 0.12,
+      roughness: 0.95,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+    });
+    for (const side of [-1, 1]) {
+      const fringe = new THREE.Mesh(new THREE.PlaneGeometry(0.068, 2.34), fringeMat);
+      fringe.rotation.x = -Math.PI / 2;
+      if (side < 0) fringe.rotation.z = Math.PI;
+      fringe.position.set(-0.14 + side * (3.38 / 2 + 0.032), 0.0024, -0.35);
+      fringe.receiveShadow = true;
+      this.scene.add(fringe);
+    }
+    this._addContactShadow(this.scene, -0.14, 0.0014, -0.35, 3.56, 2.54, 0.54);
+
+    // Silky-smooth matte architectural plaster walls (subdivided planes + subtle seamless finish -> ZERO triangle facets or tile seams!)
     const wallPBR = createPlasterPBR('#dfd3c0', 71);
     const wallMat = new THREE.MeshStandardMaterial({
       map: wallPBR.map,
       bumpMap: wallPBR.bumpMap,
-      bumpScale: 0.016,
+      bumpScale: 0.0018,
       roughness: 0.94,
-      envMapIntensity: 0.18,
+      metalness: 0.0,
+      envMapIntensity: 0.16,
     });
 
-    const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(D + 0.04, H), wallMat);
+    const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(D + 0.04, H, 16, 10), wallMat);
     leftWall.rotation.y = Math.PI / 2;
     leftWall.position.set(-W / 2, H / 2, 0.08);
     leftWall.receiveShadow = true;
     this.scene.add(leftWall);
 
-    const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(D + 0.04, H), wallMat);
+    const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(D + 0.04, H, 16, 10), wallMat);
     rightWall.rotation.y = -Math.PI / 2;
     rightWall.position.set(W / 2, H / 2, 0.08);
     rightWall.receiveShadow = true;
     this.scene.add(rightWall);
 
-    const rearWall = new THREE.Mesh(new THREE.PlaneGeometry(W, H), wallMat);
+    const rearWall = new THREE.Mesh(new THREE.PlaneGeometry(W, H, 16, 10), wallMat);
     rearWall.rotation.y = Math.PI;
     rearWall.position.set(0, H / 2, 2.8);
     rearWall.receiveShadow = true;
     this.scene.add(rearWall);
 
-    const ceilMat = new THREE.MeshStandardMaterial({ color: 0xe9e1d5, roughness: 0.92 });
-    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(W, D + 0.04), ceilMat);
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0xe9e1d5, roughness: 0.94 });
+    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(W, D + 0.04, 12, 12), ceilMat);
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.set(0, H, 0.08);
     this.scene.add(ceiling);
@@ -1592,14 +1655,16 @@ export class OfficeScene {
     const winWallMat = new THREE.MeshStandardMaterial({
       map: wallPBR.map,
       bumpMap: wallPBR.bumpMap,
-      bumpScale: 0.003,
+      bumpScale: 0.0015,
       color: 0xd8cab6,
-      roughness: 0.92,
+      roughness: 0.94,
+      metalness: 0.0,
+      envMapIntensity: 0.16,
     });
     const wallThick = 0.24;
     const zBack = -2.6 - wallThick * 0.5;
     const addWallBlock = (w, h, x, y) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, wallThick), winWallMat);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, wallThick, 4, 4, 1), winWallMat);
       m.position.set(x, y, zBack);
       m.castShadow = true;
       m.receiveShadow = true;
