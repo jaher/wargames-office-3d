@@ -175,11 +175,11 @@ def build_office_door():
     add_box("Door_JambR", (22 * MM, JAMB_D, DOOR_H + 16 * MM), (DOOR_W * 0.5 + 11 * MM, -JAMB_D * 0.5, (DOOR_H + 16 * MM) * 0.5), walnut_trim, bevel=1.5 * MM)
     add_box("Door_JambTop", (DOOR_W + 44 * MM, JAMB_D, 22 * MM), (0, -JAMB_D * 0.5, DOOR_H + 11 * MM), walnut_trim, bevel=1.5 * MM)
 
-    # Outer architectural casing trim (86mm wide x 22mm thick protruding from wall)
+    # Outer architectural casing trim (cleanly butted below header casing -> ZERO overlapping corner Z-fighting!)
     casing_y = -CASING_D * 0.5 - 18 * MM
-    add_box("Door_CasingL", (CASING_W, CASING_D, DOOR_H + CASING_W), (-DOOR_W * 0.5 - CASING_W * 0.5 - 8 * MM, casing_y, (DOOR_H + CASING_W) * 0.5), walnut_trim, bevel=2.8 * MM)
-    add_box("Door_CasingR", (CASING_W, CASING_D, DOOR_H + CASING_W), (DOOR_W * 0.5 + CASING_W * 0.5 + 8 * MM, casing_y, (DOOR_H + CASING_W) * 0.5), walnut_trim, bevel=2.8 * MM)
-    add_box("Door_CasingTop", (DOOR_W + CASING_W * 2 + 16 * MM, CASING_D + 2 * MM, CASING_W), (0, casing_y - 1 * MM, DOOR_H + CASING_W * 0.5 + 4 * MM), walnut_trim, bevel=3.0 * MM)
+    add_box("Door_CasingL", (CASING_W, CASING_D, DOOR_H + 4 * MM), (-DOOR_W * 0.5 - CASING_W * 0.5 - 8 * MM, casing_y, (DOOR_H + 4 * MM) * 0.5), walnut_trim, bevel=2.5 * MM)
+    add_box("Door_CasingR", (CASING_W, CASING_D, DOOR_H + 4 * MM), (DOOR_W * 0.5 + CASING_W * 0.5 + 8 * MM, casing_y, (DOOR_H + 4 * MM) * 0.5), walnut_trim, bevel=2.5 * MM)
+    add_box("Door_CasingTop", (DOOR_W + CASING_W * 2 + 16 * MM, CASING_D + 2 * MM, CASING_W), (0, casing_y - 1 * MM, DOOR_H + 4 * MM + CASING_W * 0.5), walnut_trim, bevel=2.8 * MM)
 
     # 3. Solid Oiled American Walnut 3-Panel Architectural Door Slab (with crisp 4mm shadow gap inside jamb!)
     slab_w = DOOR_W - 8 * MM
@@ -192,11 +192,11 @@ def build_office_door():
     add_box("Door_PanelCore", (slab_w - 6 * MM, 18 * MM, slab_h - 6 * MM), (0, slab_front_y + 18 * MM, slab_z0 + slab_h * 0.5), walnut_panel)
 
     # Left & Right full-height vertical stiles
-    add_box("Door_StileL", (stile_w, 26 * MM, slab_h), (-slab_w * 0.5 + stile_w * 0.5, slab_front_y + 13 * MM, slab_z0 + slab_h * 0.5), walnut_slab, bevel=2.2 * MM)
-    add_box("Door_StileR", (stile_w, 26 * MM, slab_h), (slab_w * 0.5 - stile_w * 0.5, slab_front_y + 13 * MM, slab_z0 + slab_h * 0.5), walnut_slab, bevel=2.2 * MM)
+    add_box("Door_StileL", (stile_w, 26 * MM, slab_h), (-slab_w * 0.5 + stile_w * 0.5, slab_front_y + 13 * MM, slab_z0 + slab_h * 0.5), walnut_slab, bevel=2.0 * MM)
+    add_box("Door_StileR", (stile_w, 26 * MM, slab_h), (slab_w * 0.5 - stile_w * 0.5, slab_front_y + 13 * MM, slab_z0 + slab_h * 0.5), walnut_slab, bevel=2.0 * MM)
 
-    # Horizontal rails (bottom kick rail, 2 intermediate muntin rails, top rail) framing 3 recessed modern panels!
-    inner_w = slab_w - stile_w * 2 + 4 * MM
+    # Horizontal rails trimmed cleanly inside vertical stiles (ZERO coplanar stile/rail overlap!)
+    inner_w = slab_w - stile_w * 2 - 0.6 * MM
     rail_specs = [
         ("Door_RailBot", 210 * MM, slab_z0 + 105 * MM),
         ("Door_RailMid1", 110 * MM, slab_z0 + 755 * MM),

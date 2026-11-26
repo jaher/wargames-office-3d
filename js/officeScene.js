@@ -34,6 +34,10 @@ export const CAMERA_PRESETS = {
     pos: [-0.25, 1.32, 0.86],
     target: [3.18, 1.12, 1.56],
   },
+  gpu: {
+    pos: [0.58, 1.27, -0.57],
+    target: [0.85, 1.04, -0.98],
+  },
 };
 
 // Note: BMP-safe Unicode icons (☀ / ☾ / ☼) ensure zero missing-glyph tofu boxes across all OS/browsers.
@@ -466,28 +470,49 @@ function createTemperedGlassTexture() {
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d');
-  // Crystal-clear dark-smoked Corsair 5000D tempered glass (ZERO milky blue-grey fog — deep contrast + sharp upper-right/left grazing Fresnel speculars!)
+  // Photorealistic dark-smoked Corsair 5000D tempered glass with crisp golden-hour window pane reflection & chamfered bevel!
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = 'rgba(4, 6, 10, 0.16)';
+  ctx.fillStyle = 'rgba(6, 9, 14, 0.24)';
   ctx.fillRect(28, 28, W - 56, H - 56);
 
   ctx.save();
   ctx.beginPath();
   ctx.rect(30, 30, W - 60, H - 60);
   ctx.clip();
-  // Crisp narrow diagonal upper-left golden-hour sky specular band (leaves 80% of glass crystal clear & deep contrast!)
-  const winRefl = ctx.createLinearGradient(28, H - 28, W * 0.52, H * 0.52);
-  winRefl.addColorStop(0.0, 'rgba(255, 224, 184, 0.24)');
-  winRefl.addColorStop(0.42, 'rgba(255, 232, 200, 0.08)');
-  winRefl.addColorStop(1.0, 'rgba(210, 226, 244, 0.0)');
-  ctx.fillStyle = winRefl;
-  ctx.fillRect(30, 30, W - 60, H - 60);
-  // Razor-crisp Fresnel grazing edge highlight along the right glass bevel
-  const edgeG = ctx.createLinearGradient(W - 42, 0, W - 28, 0);
-  edgeG.addColorStop(0, 'rgba(210, 228, 245, 0.0)');
-  edgeG.addColorStop(1, 'rgba(220, 236, 252, 0.36)');
-  ctx.fillStyle = edgeG;
-  ctx.fillRect(W - 42, 30, 14, H - 60);
+  // Diagonal reflected architectural window sky + crisp mullion shadow bar across upper-right/left glass
+  ctx.save();
+  ctx.translate(W * 0.5, H * 0.5);
+  ctx.rotate(-0.34);
+  const skyRefl = ctx.createLinearGradient(-220, -240, 220, 120);
+  skyRefl.addColorStop(0.0, 'rgba(255, 226, 188, 0.34)');
+  skyRefl.addColorStop(0.28, 'rgba(255, 214, 174, 0.16)');
+  skyRefl.addColorStop(0.55, 'rgba(218, 232, 250, 0.07)');
+  skyRefl.addColorStop(1.0, 'rgba(180, 210, 240, 0.0)');
+  ctx.fillStyle = skyRefl;
+  ctx.fillRect(-300, -300, 600, 270);
+  // Crisp reflected dark architectural window mullion silhouette cutting cleanly across the diagonal sky reflection
+  ctx.fillStyle = 'rgba(10, 14, 22, 0.20)';
+  ctx.fillRect(-300, -138, 600, 14);
+  ctx.fillRect(-26, -300, 16, 260);
+  // Sharp secondary grazing sheen strip near top edge
+  const streak = ctx.createLinearGradient(-260, -210, 260, -155);
+  streak.addColorStop(0.0, 'rgba(255, 238, 212, 0.22)');
+  streak.addColorStop(0.5, 'rgba(255, 238, 212, 0.06)');
+  streak.addColorStop(1.0, 'rgba(255, 238, 212, 0.0)');
+  ctx.fillStyle = streak;
+  ctx.fillRect(-280, -225, 560, 44);
+  ctx.restore();
+  // Razor-crisp Fresnel grazing edge highlights along left & right chamfered glass bevels
+  const edgeR = ctx.createLinearGradient(W - 46, 0, W - 28, 0);
+  edgeR.addColorStop(0, 'rgba(210, 228, 245, 0.0)');
+  edgeR.addColorStop(1, 'rgba(232, 244, 255, 0.44)');
+  ctx.fillStyle = edgeR;
+  ctx.fillRect(W - 46, 30, 18, H - 60);
+  const edgeL = ctx.createLinearGradient(28, 0, 44, 0);
+  edgeL.addColorStop(0, 'rgba(255, 224, 186, 0.34)');
+  edgeL.addColorStop(1, 'rgba(255, 224, 186, 0.0)');
+  ctx.fillStyle = edgeL;
+  ctx.fillRect(28, 30, 16, H - 60);
   ctx.restore();
 
   // Crisp matte-black silkscreened ceramic frit border matching real 5000D tempered glass
@@ -495,8 +520,8 @@ function createTemperedGlassTexture() {
   ctx.lineWidth = 30;
   ctx.strokeRect(15, 15, W - 30, H - 30);
   // Crisp chamfered physical glass-edge inner specular hairline
-  ctx.strokeStyle = 'rgba(208, 226, 244, 0.54)';
-  ctx.lineWidth = 1.8;
+  ctx.strokeStyle = 'rgba(224, 238, 252, 0.68)';
+  ctx.lineWidth = 2.0;
   ctx.strokeRect(30.5, 30.5, W - 61, H - 61);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -1000,6 +1025,7 @@ export class OfficeScene {
     this.sparkLeds = [];
     this.switchLeds = [];
     this.pcEmissives = [];
+    this.spinningFans = [];
     this.sunBeams = [];
     this.clickableMeshes = [];
     this.dustPoints = null;
@@ -1044,7 +1070,8 @@ export class OfficeScene {
 
     const w = this.canvas.clientWidth || window.innerWidth;
     const h = this.canvas.clientHeight || window.innerHeight;
-    this.camera = new THREE.PerspectiveCamera(41, w / h, 0.05, 340);
+    // Tighter near/far planes (0.12..210) boost WebGL depth-buffer precision >2.4x to eliminate Z-fighting!
+    this.camera = new THREE.PerspectiveCamera(41, w / h, 0.12, 210);
 
     this.controls = new OrbitControls(this.camera, this.canvas);
     this.controls.enableDamping = true;
@@ -1201,10 +1228,14 @@ export class OfficeScene {
         transparent: true,
         opacity,
         depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
       })
     );
     m.rotation.x = -Math.PI / 2;
     m.position.set(x, y, z);
+    m.renderOrder = 2;
     parent.add(m);
     return m;
   }
@@ -1336,9 +1367,9 @@ export class OfficeScene {
       metalness: 0.02,
       envMapIntensity: 0.26,
     });
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), floorMat);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D + 0.04), floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.set(0, 0, 0.1);
+    floor.position.set(0, 0, 0.08);
     floor.receiveShadow = true;
     this.scene.add(floor);
 
@@ -1350,10 +1381,10 @@ export class OfficeScene {
       roughness: 0.94,
     });
     const rug = new THREE.Mesh(new RoundedBoxGeometry(3.38, 0.016, 2.38, 2, 0.005), rugMat);
-    rug.position.set(-0.14, 0.008, -0.35);
+    rug.position.set(-0.14, 0.0085, -0.35);
     rug.receiveShadow = true;
     this.scene.add(rug);
-    this._addContactShadow(this.scene, -0.14, 0.0018, -0.35, 3.54, 2.54, 0.52);
+    this._addContactShadow(this.scene, -0.14, 0.0014, -0.35, 3.54, 2.54, 0.52);
 
     // Warm matte architectural Venetian plaster walls with tactile limewash bump & corner AO depth!
     const wallPBR = createPlasterPBR('#dfd3c0', 71);
@@ -1365,15 +1396,15 @@ export class OfficeScene {
       envMapIntensity: 0.18,
     });
 
-    const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(D, H), wallMat);
+    const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(D + 0.04, H), wallMat);
     leftWall.rotation.y = Math.PI / 2;
-    leftWall.position.set(-W / 2, H / 2, 0.1);
+    leftWall.position.set(-W / 2, H / 2, 0.08);
     leftWall.receiveShadow = true;
     this.scene.add(leftWall);
 
-    const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(D, H), wallMat);
+    const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(D + 0.04, H), wallMat);
     rightWall.rotation.y = -Math.PI / 2;
-    rightWall.position.set(W / 2, H / 2, 0.1);
+    rightWall.position.set(W / 2, H / 2, 0.08);
     rightWall.receiveShadow = true;
     this.scene.add(rightWall);
 
@@ -1384,12 +1415,12 @@ export class OfficeScene {
     this.scene.add(rearWall);
 
     const ceilMat = new THREE.MeshStandardMaterial({ color: 0xe9e1d5, roughness: 0.92 });
-    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(W, D), ceilMat);
+    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(W, D + 0.04), ceilMat);
     ceiling.rotation.x = Math.PI / 2;
-    ceiling.position.set(0, H, 0.1);
+    ceiling.position.set(0, H, 0.08);
     this.scene.add(ceiling);
 
-    // Back wall framing the panoramic window aperture
+    // Back wall framing the panoramic window aperture (strictly non-overlapping with side walls, floor, ceiling & outer mullions -> ZERO Z-fighting!)
     const winWallMat = new THREE.MeshStandardMaterial({
       map: wallPBR.map,
       bumpMap: wallPBR.bumpMap,
@@ -1406,12 +1437,14 @@ export class OfficeScene {
       m.receiveShadow = true;
       this.scene.add(m);
     };
-    addWallBlock(0.65, H, -3.2 + 0.325, H / 2);
-    addWallBlock(0.95, H, 2.25 + 0.475, H / 2);
-    addWallBlock(4.8, 0.58, -0.15, 0.29);
-    addWallBlock(4.8, 0.28, -0.15, 2.96);
+    // Side piers trimmed 4mm inside left/right walls, floor & ceiling (x: [-3.196..-2.550] & [2.250..3.196], y: [0.004..3.096])
+    addWallBlock(0.646, H - 0.008, -2.873, H / 2);
+    addWallBlock(0.946, H - 0.008, 2.723, H / 2);
+    // Bottom & top spandrels trimmed strictly inside side piers AND stopping cleanly outside outer mullions (y<=0.542 & y>=2.858)!
+    addWallBlock(4.796, 0.538, -0.15, 0.273);
+    addWallBlock(4.796, 0.238, -0.15, 2.977);
 
-    // Rich warm walnut architectural window mullions (warm wood grain & interior bounce — NEVER crushed pitch-black!)
+    // Rich warm walnut architectural window mullions (100% non-overlapping joints & strict depth stepping -> ZERO window Z-fighting!)
     const sillPBR = createWoodPBR({
       base: '#7a4e2d',
       grain: '#432512',
@@ -1439,16 +1472,22 @@ export class OfficeScene {
       m.receiveShadow = true;
       this.scene.add(m);
     };
-    const wz = -2.68;
-    addMullion(4.84, 0.076, 0.18, -0.15, 2.82, wz);
-    addMullion(4.84, 0.076, 0.18, -0.15, 0.58, wz);
-    addMullion(0.076, 2.28, 0.18, -2.55, 1.7, wz);
-    addMullion(0.076, 2.28, 0.18, 2.25, 1.7, wz);
-    addMullion(0.056, 2.22, 0.14, -0.95, 1.7, wz);
-    addMullion(0.056, 2.22, 0.14, 0.65, 1.7, wz);
-    addMullion(4.80, 0.052, 0.13, -0.15, 2.22, wz);
+    const wz = -2.70;
+    // Outer frame strictly inside wall aperture (x: [-2.546..2.246], y: [0.544..2.856], z: [-2.788..-2.612])
+    addMullion(4.792, 0.072, 0.176, -0.15, 2.820, wz);
+    addMullion(4.792, 0.072, 0.176, -0.15, 0.580, wz);
+    // Outer left & right verticals strictly BETWEEN top & bottom outer frames (y: [0.618..2.782]) & strictly INSIDE side piers!
+    addMullion(0.072, 2.164, 0.170, -2.510, 1.700, wz);
+    addMullion(0.072, 2.164, 0.170, 2.210, 1.700, wz);
+    // Horizontal transom strictly BETWEEN outer left & right verticals (x: [-2.472..2.172], y: [2.194..2.246])
+    addMullion(4.644, 0.052, 0.140, -0.15, 2.220, wz);
+    // Two inner vertical mullions SPLIT cleanly below & above the horizontal transom (ZERO cross-joint overlap!)
+    for (const mx of [-0.95, 0.65]) {
+      addMullion(0.056, 1.574, 0.112, mx, 1.405, wz);
+      addMullion(0.056, 0.534, 0.112, mx, 2.515, wz);
+    }
 
-    // Stepped recessed interior wooden sash stop-beads catching warm golden rim highlights (architectural depth like felixrieseberg.com!)
+    // Recessed interior wooden sash stop-beads cleanly split & offset with ZERO overlap!
     const sashRimMat = new THREE.MeshStandardMaterial({
       map: sillPBR.map,
       color: 0xa6744c,
@@ -1461,14 +1500,16 @@ export class OfficeScene {
       m.position.set(x, y, z);
       this.scene.add(m);
     };
-    addRimBead(0.016, 2.20, 0.04, -0.916, 1.7, wz + 0.06);
-    addRimBead(0.016, 2.20, 0.04, 0.684, 1.7, wz + 0.06);
-    addRimBead(4.78, 0.016, 0.04, -0.15, 2.252, wz + 0.055);
-    addRimBead(4.78, 0.016, 0.04, -0.15, 2.780, wz + 0.07);
+    addRimBead(4.640, 0.014, 0.016, -0.15, 2.775, -2.618);
+    addRimBead(4.640, 0.014, 0.016, -0.15, 2.255, -2.632);
+    for (const bx of [-0.914, 0.686]) {
+      addRimBead(0.014, 1.570, 0.016, bx, 1.405, -2.646);
+      addRimBead(0.014, 0.502, 0.016, bx, 2.515, -2.646);
+    }
 
-    // Architectural reflective window glass sheet (silky interior glass reflection & subtle edge mist separating skyline from room!)
+    // Architectural reflective window glass sheet strictly BEHIND all mullions & outer frame (z = -2.805 -> ZERO glass/mullion intersection!)
     const winGlass = new THREE.Mesh(
-      new THREE.PlaneGeometry(4.76, 2.20),
+      new THREE.PlaneGeometry(4.66, 2.17),
       new THREE.MeshBasicMaterial({
         map: createWindowGlassReflectionTexture(),
         color: 0xffffff,
@@ -1477,10 +1518,11 @@ export class OfficeScene {
         depthWrite: false,
       })
     );
-    winGlass.position.set(-0.15, 1.70, wz + 0.02);
+    winGlass.position.set(-0.15, 1.70, -2.805);
+    winGlass.renderOrder = 1;
     this.scene.add(winGlass);
 
-    // Deep matte oiled walnut window sill (roughness 0.95 & low envMapIntensity -> ZERO blown-out white specular strip!)
+    // Deep matte oiled walnut window sill strictly IN FRONT of back wall (-2.600) & bottom mullion (-2.612) -> ZERO overlap!
     const sillMat = new THREE.MeshStandardMaterial({
       map: sillPBR.map,
       roughnessMap: sillPBR.roughnessMap,
@@ -1491,8 +1533,8 @@ export class OfficeScene {
       metalness: 0.0,
       envMapIntensity: 0.06,
     });
-    const sill = new THREE.Mesh(new RoundedBoxGeometry(4.92, 0.040, 0.32, 2, 0.006), sillMat);
-    sill.position.set(-0.15, 0.598, -2.62);
+    const sill = new THREE.Mesh(new RoundedBoxGeometry(4.92, 0.036, 0.21, 2, 0.006), sillMat);
+    sill.position.set(-0.15, 0.598, -2.490);
     sill.receiveShadow = true;
     this.scene.add(sill);
 
@@ -1514,8 +1556,8 @@ export class OfficeScene {
       this.scene.add(finial);
     }
     for (const bx of [-2.68, -0.15, 2.38]) {
-      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.042, 0.34), brassMat);
-      bracket.position.set(bx, 2.86, -2.43);
+      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.042, 0.334), brassMat);
+      bracket.position.set(bx, 2.86, -2.429);
       this.scene.add(bracket);
     }
     for (const rx of [-2.66, -2.52, -2.38, -2.24, -2.10, 1.78, 1.92, 2.06, 2.20, 2.34]) {
@@ -1558,13 +1600,13 @@ export class OfficeScene {
     this.scene.add(feltBacking);
     for (let i = 0; i < 24; i++) {
       const slat = new THREE.Mesh(new THREE.BoxGeometry(0.028, 2.66, 0.036), slatWoodMat);
-      slat.position.set(-3.168, 1.48, -2.38 + i * 0.066);
+      slat.position.set(-3.164, 1.48, -2.38 + i * 0.066);
       slat.castShadow = true;
       slat.receiveShadow = true;
       this.scene.add(slat);
     }
 
-    // Architectural warm-taupe baseboards (right wall splits cleanly around the 914mm walnut entrance door at z = +1.62!)
+    // Architectural warm-taupe baseboards offset cleanly from wall planes & trimmed at corners (ZERO wall/corner Z-fighting!)
     const trimMat = new THREE.MeshStandardMaterial({ color: 0xa99d8d, roughness: 0.74 });
     const addBaseboard = (w, h, d, x, y, z) => {
       const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), trimMat);
@@ -1572,12 +1614,12 @@ export class OfficeScene {
       b.receiveShadow = true;
       this.scene.add(b);
     };
-    addBaseboard(0.024, 0.11, D, -3.188, 0.055, 0.1);
+    addBaseboard(0.022, 0.11, D - 0.056, -3.186, 0.056, 0.1);
     // Right wall baseboard split cleanly on either side of the office entrance door casing (z = 1.07..2.17)
-    addBaseboard(0.024, 0.11, 3.67, 3.188, 0.055, -0.765);
-    addBaseboard(0.024, 0.11, 0.63, 3.188, 0.055, 2.485);
-    addBaseboard(W, 0.11, 0.024, 0, 0.055, -2.588);
-    addBaseboard(W, 0.11, 0.024, 0, 0.055, 2.788);
+    addBaseboard(0.022, 0.11, 3.63, 3.186, 0.056, -0.765);
+    addBaseboard(0.022, 0.11, 0.59, 3.186, 0.056, 2.485);
+    addBaseboard(W - 0.060, 0.11, 0.022, 0, 0.056, -2.586);
+    addBaseboard(W - 0.060, 0.11, 0.022, 0, 0.056, 2.786);
 
     // Realistic Architectural Oiled-Walnut Office Entrance Door (with brass lever, hinges, threshold & wall dimmer switch!)
     this._loadGLB('assets/models/office_door.glb', (door) => {
@@ -1605,11 +1647,11 @@ export class OfficeScene {
       [-1.7, 1.2],
       [1.7, 1.2],
     ]) {
-      const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.015, 20), fixtureMat);
-      ring.position.set(dx, H - 0.008, dz);
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.014, 20), fixtureMat);
+      ring.position.set(dx, H - 0.009, dz);
       this.scene.add(ring);
-      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.01, 20), glowBulbMat);
-      lens.position.set(dx, H - 0.014, dz);
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.004, 20), glowBulbMat);
+      lens.position.set(dx, H - 0.0185, dz);
       this.scene.add(lens);
     }
 
@@ -1617,11 +1659,11 @@ export class OfficeScene {
     const bar = new THREE.Mesh(new RoundedBoxGeometry(1.42, 0.042, 0.058, 2, 0.006), fixtureMat);
     bar.position.set(-0.35, 2.48, -0.95);
     pendantGroup.add(bar);
-    const barAccent = new THREE.Mesh(new THREE.BoxGeometry(1.44, 0.01, 0.062), brassMat);
-    barAccent.position.set(-0.35, 2.502, -0.95);
+    const barAccent = new THREE.Mesh(new THREE.BoxGeometry(1.44, 0.008, 0.062), brassMat);
+    barAccent.position.set(-0.35, 2.506, -0.95);
     pendantGroup.add(barAccent);
-    const diffuser = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.01, 0.04), glowBulbMat);
-    diffuser.position.set(-0.35, 2.456, -0.95);
+    const diffuser = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.008, 0.04), glowBulbMat);
+    diffuser.position.set(-0.35, 2.454, -0.95);
     pendantGroup.add(diffuser);
     for (const sx of [-0.92, 0.22]) {
       const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.62, 8), fixtureMat);
@@ -1713,17 +1755,17 @@ export class OfficeScene {
     this.chairRimLight.position.set(-1.35, 1.05, 1.15);
     this.scene.add(this.chairRimLight);
 
-    // Localized cyan-teal RGB bounce lights inside the Corsair 5000D casting rich cool bounce onto MSI VRM heatsinks & RTX 5090 FE frame!
-    this.pcRgbLight = new THREE.PointLight(0x5ad8fc, 0.44, 0.86, 1.9);
+    // Restrained localized cyan-teal RGB bounce inside the Corsair 5000D (preserves rich dark contrast & metallic shadow depth!)
+    this.pcRgbLight = new THREE.PointLight(0x66d4f8, 0.16, 0.50, 2.2);
     this.pcRgbLight.position.set(0.86, 1.24, -0.98);
     this.scene.add(this.pcRgbLight);
-    // Front-intake cyan bounce light inside the 3x front RX120 fans illuminating RAM & GPU front edge!
-    this.pcFrontRgbBounce = new THREE.PointLight(0x46d2f8, 0.24, 0.56, 2.0);
+    // Subtle front-intake cyan bounce light inside the 3x front RX120 fans
+    this.pcFrontRgbBounce = new THREE.PointLight(0x52ccf4, 0.14, 0.40, 2.1);
     this.pcFrontRgbBounce.position.set(0.96, 1.09, -0.80);
     this.scene.add(this.pcFrontRgbBounce);
-    // Subtle lower motherboard/M.2 fill strictly capped ABOVE the desk surface (0.99 - 0.77 = 0.22m > 0.20m -> ZERO desk bleed!)
-    this.pcLowerFill = new THREE.PointLight(0x7cd6f4, 0.11, 0.20, 2.0);
-    this.pcLowerFill.position.set(0.82, 0.99, -0.96);
+    // Clean neutral lower-motherboard/M.2 interior fill strictly capped ABOVE the desk surface (illuminates MP600 CORE XT R2 & chipset!)
+    this.pcLowerFill = new THREE.PointLight(0xdce8f6, 0.28, 0.34, 1.9);
+    this.pcLowerFill.position.set(0.76, 0.96, -0.95);
     this.scene.add(this.pcLowerFill);
   }
 
@@ -1772,7 +1814,7 @@ export class OfficeScene {
 
     const shelfYs = [0.14, 0.54, 0.94, 1.34, 1.74, 2.12];
     for (const y of shelfYs) {
-      const board = new THREE.Mesh(new RoundedBoxGeometry(sw - 0.02, 0.028, sd - 0.01, 2, 0.003), shelfWoodMat);
+      const board = new THREE.Mesh(new RoundedBoxGeometry(sw - 0.068, 0.028, sd - 0.012, 2, 0.003), shelfWoodMat);
       board.position.set(0, y, 0);
       board.castShadow = true;
       board.receiveShadow = true;
@@ -1845,9 +1887,12 @@ export class OfficeScene {
           roughness: 0.56,
           metalness: 0.02,
           envMapIntensity: 0.35,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
         })
       );
-      art.position.z = 0.015;
+      art.position.z = 0.0165;
       g.add(art);
       g.position.set(x, y, z);
       g.rotation.y = rotY;
@@ -1910,8 +1955,7 @@ export class OfficeScene {
       });
       fig.position.set(-1.98, 0, -1.48);
       fig.rotation.y = 0.55;
-      this._addContactShadow(this.scene, -1.98, 0.003, -1.48, 0.78, 0.78, 0.94);
-      this._addContactShadow(this.scene, -1.98, 0.004, -1.48, 0.44, 0.44, 0.98);
+      this._addContactShadow(this.scene, -1.98, 0.004, -1.48, 0.72, 0.72, 0.94);
       this.scene.add(fig);
     });
 
@@ -1951,15 +1995,14 @@ export class OfficeScene {
       });
       snake.position.set(2.22, 0, -1.52);
       snake.rotation.y = -0.35;
-      this._addContactShadow(this.scene, 2.22, 0.003, -1.52, 0.64, 0.64, 0.94);
-      this._addContactShadow(this.scene, 2.22, 0.004, -1.52, 0.38, 0.38, 0.98);
+      this._addContactShadow(this.scene, 2.22, 0.004, -1.52, 0.58, 0.58, 0.94);
       this.scene.add(snake);
     });
 
-    // Subtle floor-to-baseboard crevice AO strip along back & side walls for deeply grounded architectural realism
-    this._addContactShadow(this.scene, 0.0, 0.0025, -2.52, 7.6, 0.34, 0.76);
-    this._addContactShadow(this.scene, 3.05, 0.0025, -0.4, 0.34, 5.4, 0.68);
-    this._addContactShadow(this.scene, -3.12, 0.0025, -0.4, 0.34, 5.4, 0.68);
+    // Subtle non-overlapping floor-to-baseboard crevice AO strips (stepped lengths -> ZERO corner Z-fighting!)
+    this._addContactShadow(this.scene, 0.0, 0.0022, -2.52, 6.0, 0.30, 0.74);
+    this._addContactShadow(this.scene, 3.05, 0.0026, 0.10, 0.30, 4.9, 0.66);
+    this._addContactShadow(this.scene, -3.10, 0.0026, 0.10, 0.30, 4.9, 0.66);
   }
 
   // ---------- 5. Uplift V2 Walnut Desk + Blender Real Peripherals (NO speakers per owner!) ----------
@@ -2005,28 +2048,27 @@ export class OfficeScene {
     desktop.receiveShadow = true;
     deskGroup.add(desktop);
 
-    // Uplift V2 T-frame standing desk legs
+    // Uplift V2 T-frame standing desk legs (resting cleanly ON TOP of rug at y=0.017 -> ZERO rug/shadow Z-fighting!)
     for (const lx of [deskX - deskW / 2 + 0.14, deskX + deskW / 2 - 0.14]) {
-      const colLower = new THREE.Mesh(new RoundedBoxGeometry(0.068, 0.40, 0.068, 2, 0.004), metalMat);
-      colLower.position.set(lx, 0.22, deskZ);
-      colLower.castShadow = true;
-      deskGroup.add(colLower);
-
-      const colUpper = new THREE.Mesh(new RoundedBoxGeometry(0.056, 0.34, 0.056, 2, 0.004), metalMat);
-      colUpper.position.set(lx, 0.56, deskZ);
-      colUpper.castShadow = true;
-      deskGroup.add(colUpper);
-
       const footBar = new THREE.Mesh(new RoundedBoxGeometry(0.068, 0.028, deskD - 0.18, 2, 0.005), metalMat);
-      footBar.position.set(lx, 0.018, deskZ);
+      footBar.position.set(lx, 0.0315, deskZ);
       footBar.castShadow = true;
       deskGroup.add(footBar);
 
-      this._addContactShadow(deskGroup, lx, 0.0175, deskZ, 0.24, deskD - 0.06, 0.96);
-      this._addContactShadow(deskGroup, lx, 0.0182, deskZ, 0.13, deskD - 0.14, 1.0);
+      const colLower = new THREE.Mesh(new RoundedBoxGeometry(0.068, 0.40, 0.068, 2, 0.004), metalMat);
+      colLower.position.set(lx, 0.246, deskZ);
+      colLower.castShadow = true;
+      deskGroup.add(colLower);
+
+      const colUpper = new THREE.Mesh(new RoundedBoxGeometry(0.056, 0.29, 0.056, 2, 0.004), metalMat);
+      colUpper.position.set(lx, 0.592, deskZ);
+      colUpper.castShadow = true;
+      deskGroup.add(colUpper);
+
+      this._addContactShadow(deskGroup, lx, 0.0172, deskZ, 0.22, deskD - 0.08, 0.94);
     }
     // Deep, soft ambient occlusion shadow cast by the 2.52m solid walnut desktop onto the rug & floor beneath it!
-    this._addContactShadow(deskGroup, deskX, 0.0175, deskZ + 0.04, deskW + 0.24, deskD + 0.34, 0.78);
+    this._addContactShadow(deskGroup, deskX, 0.0166, deskZ + 0.04, deskW + 0.24, deskD + 0.34, 0.76);
     const beam = new THREE.Mesh(new THREE.BoxGeometry(deskW - 0.30, 0.048, 0.042), metalMat);
     beam.position.set(deskX, topY - 0.055, deskZ - 0.18);
     deskGroup.add(beam);
@@ -2091,8 +2133,7 @@ export class OfficeScene {
           obj.material.envMapIntensity = 1.6;
         }
       });
-      this._addContactShadow(deskGroup, 0.06, sy + 0.0007, -0.59, 0.21, 0.18, 0.94);
-      this._addContactShadow(deskGroup, 0.06, sy + 0.0011, -0.59, 0.14, 0.09, 0.98);
+      this._addContactShadow(deskGroup, 0.06, sy + 0.0014, -0.59, 0.19, 0.16, 0.92);
       deskGroup.add(glasses);
     });
 
@@ -2106,14 +2147,13 @@ export class OfficeScene {
           obj.material.roughness = 0.68;
         }
       });
-      this._addContactShadow(deskGroup, 0.28, sy + 0.0007, -0.58, 0.14, 0.12, 0.96);
-      this._addContactShadow(deskGroup, 0.28, sy + 0.0011, -0.58, 0.09, 0.08, 1.0);
+      this._addContactShadow(deskGroup, 0.28, sy + 0.0014, -0.58, 0.13, 0.11, 0.94);
       deskGroup.add(band);
     });
 
     // Tripp Lite ISOBAR8ULTRA 8-Outlet All-Metal Surge Suppressor Seated Flush on Floor/Rug + Grounded AO + Direct Rear Wall-Outlet Routing!
     const isoX = 0.44;
-    const isoY = 0.0155; // Flush on top of the rug surface with tight under-chassis contact shadow!
+    const isoY = 0.0165; // Flush on top of the rug surface with tight under-chassis contact shadow!
     const isoZ = -1.30;
     const isoRotY = -0.14;
     this._loadGLB('assets/models/tripp_lite_isobar8.glb', (isobar) => {
@@ -2124,8 +2164,7 @@ export class OfficeScene {
           obj.material.map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         }
       });
-      this._addContactShadow(deskGroup, isoX, isoY + 0.0006, isoZ, 0.36, 0.20, 0.96);
-      this._addContactShadow(deskGroup, isoX, isoY + 0.0011, isoZ, 0.28, 0.13, 1.0);
+      this._addContactShadow(deskGroup, isoX, isoY + 0.0016, isoZ, 0.34, 0.18, 0.96);
       deskGroup.add(isobar);
     });
 
@@ -2263,10 +2302,14 @@ export class OfficeScene {
       opacity: 0.78,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
     });
     const lampPool = new THREE.Mesh(new THREE.PlaneGeometry(0.96, 0.74), this.lampPoolMat);
     lampPool.rotation.x = -Math.PI / 2;
-    lampPool.position.set(-1.08, sy + 0.0014, -0.76);
+    lampPool.position.set(-1.08, sy + 0.0026, -0.76);
+    lampPool.renderOrder = 3;
     deskGroup.add(lampPool);
 
     this._loadGLB('assets/models/coffee_mug.glb', (mug) => {
@@ -2324,10 +2367,9 @@ export class OfficeScene {
       });
       monGroup.add(monModel);
     });
-    this._addContactShadow(monGroup, 0, 0.0008, -0.036, 0.34, 0.26, 0.88);
-    this._addContactShadow(monGroup, 0, 0.0011, -0.036, 0.30, 0.22, 0.92);
+    this._addContactShadow(monGroup, 0, 0.0016, -0.036, 0.33, 0.25, 0.92);
 
-    // Exact 34" 21:9 ultrawide active display (800 x 336 mm) with authentic 1900R curvature matching dell_u3425we.glb!
+    // Exact 34" 21:9 ultrawide active display (800 x 336 mm) cleanly offset +4.2mm in front of curved Dell panel (ZERO Z-fighting!)
     const screenW = 0.798;
     const screenH = 0.334;
     const panelCenterY = 0.342;
@@ -2337,15 +2379,18 @@ export class OfficeScene {
     const posAttr = screenGeo.attributes.position;
     for (let i = 0; i < posAttr.count; i++) {
       const x = posAttr.getX(i);
-      const zCurve = (curveR - Math.sqrt(Math.max(0.01, curveR * curveR - x * x))) + 0.0022;
+      const zCurve = (curveR - Math.sqrt(Math.max(0.01, curveR * curveR - x * x))) + 0.0044;
       posAttr.setZ(i, zCurve);
     }
     screenGeo.computeVertexNormals();
 
-    // Self-luminous anti-glare IPS Omarchy display (ZERO lamp glare blowout in Golden Hour or Twilight!)
+    // Self-luminous anti-glare IPS Omarchy display (ZERO lamp glare blowout & ZERO Z-fighting!)
     const screenMat = new THREE.MeshBasicMaterial({
       map: this.omarchyScreen.texture,
       toneMapped: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
     });
     const screenMesh = new THREE.Mesh(screenGeo, screenMat);
     screenMesh.position.set(0, panelCenterY, 0);
@@ -2386,53 +2431,96 @@ export class OfficeScene {
           obj.material = new THREE.MeshPhysicalMaterial({
             map: glassTex,
             emissiveMap: glassTex,
-            emissive: new THREE.Color(0xffe8cb),
-            emissiveIntensity: 0.12,
+            emissive: new THREE.Color(0xffe6c4),
+            emissiveIntensity: 0.22,
             color: 0xffffff,
             side: THREE.DoubleSide,
             transparent: true,
-            opacity: 0.76,
-            roughness: 0.04,
-            metalness: 0.08,
-            reflectivity: 0.88,
-            envMapIntensity: 0.46,
-            clearcoat: 0.0,
+            opacity: 0.90,
+            roughness: 0.03,
+            metalness: 0.06,
+            ior: 1.52,
+            reflectivity: 0.96,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.03,
+            envMapIntensity: 1.35,
             depthWrite: false,
           });
+          obj.renderOrder = 10;
+          obj.castShadow = false;
+        } else if (matName === 'FE_TitaniumExoskeleton' || matName === 'FE_XFrameBevel' || matName === 'FE_DarkSteelBracket') {
+          obj.material.envMapIntensity = 0.72;
+        } else if (matName === 'FE_PocketRecess' || matName === 'FE_PlugMoldedHousing') {
+          obj.material.envMapIntensity = 0.12;
+        } else if (matName === 'FE_AnodizedFin') {
+          obj.material.envMapIntensity = 0.38;
+        } else if (matName === 'FE_FanPolymer' || matName === 'FE_FanShroudRing') {
+          obj.material.envMapIntensity = 0.74;
+        } else if (matName === 'RTX5090_VLEDMat') {
+          obj.material.transparent = true;
+          obj.material.depthWrite = false;
+          obj.material.side = THREE.DoubleSide;
+          obj.material.polygonOffset = true;
+          obj.material.polygonOffsetFactor = -2;
+          obj.material.polygonOffsetUnits = -2;
+          obj.renderOrder = 6;
           obj.castShadow = false;
         } else if (matName === 'AIO_BraidedHose') {
-          obj.material.envMapIntensity = 0.10;
-          obj.material.roughness = 0.96;
+          obj.material.envMapIntensity = 0.22;
+          obj.material.roughness = 0.84;
         } else if (matName === 'Corsair_RX120Blade') {
           obj.material.transparent = true;
           obj.material.opacity = 0.88;
           obj.material.side = THREE.DoubleSide;
           obj.material.depthWrite = false;
+          obj.renderOrder = 4;
         } else if (matName === 'Corsair_TitanDomeGlass') {
           obj.material.transparent = true;
           obj.material.opacity = 0.34;
           obj.material.depthWrite = false;
-        } else if (matName === 'Braided_Cable' || matName === 'Braided_CableGraphite' || matName === 'Corsair_RubberGrommet') {
-          obj.castShadow = false;
-          obj.material.envMapIntensity = 0.14;
-        } else if (matName === 'Corsair_PSUTopVent' || matName === 'Corsair_RapidRouteMatte') {
-          obj.material.envMapIntensity = 0.24;
-        } else if (matName === 'RGB_Cyan' || matName === 'RGB_Mint') {
-          this.pcEmissives.push({ mat: obj.material, phase: obj.position.y * 4.0 + obj.position.z * 2.0 });
-        } else if (matName === 'Corsair_AirflowGrille' || matName === 'Corsair_TopAirflowGrille') {
-          // Smooth hardware-antialiased alpha blending eliminates 1-bit alphaTest shimmering/aliasing on perforated steel!
-          obj.material.side = THREE.DoubleSide;
+          obj.renderOrder = 6;
+        } else if (matName === 'RTX5090_SideLogoMat' || matName === 'RTX5090_TopLogoMat') {
           obj.material.transparent = true;
           obj.material.alphaTest = 0.04;
           obj.material.depthWrite = false;
+          obj.material.polygonOffset = true;
+          obj.material.polygonOffsetFactor = -2;
+          obj.material.polygonOffsetUnits = -2;
+          obj.renderOrder = 5;
+          obj.castShadow = false;
+        } else if (matName === 'Braided_Cable' || matName === 'Braided_CableGraphite' || matName === 'Corsair_RubberGrommet') {
+          obj.castShadow = false;
+          obj.material.envMapIntensity = 0.16;
+        } else if (matName === 'Corsair_PSUTopVent' || matName === 'Corsair_RapidRouteMatte') {
+          obj.material.envMapIntensity = 0.28;
+        } else if (matName === 'RGB_Cyan' || matName === 'RGB_Mint') {
+          this.pcEmissives.push({ mat: obj.material, phase: obj.position.y * 4.0 + obj.position.z * 2.0 });
+        } else if (matName === 'Corsair_AirflowGrille' || matName === 'Corsair_TopAirflowGrille') {
+          // Opaque cutout stamped steel with depthWrite:true so front RX120 fans stay strictly BEHIND the perforated steel mesh (ZERO clipping!)
+          obj.material.side = THREE.DoubleSide;
+          obj.material.transparent = false;
+          obj.material.alphaTest = 0.46;
+          obj.material.depthWrite = true;
+          obj.renderOrder = 2;
+        }
+
+        // Register all 7 Corsair iCUE LINK RX120 case fans & both RTX 5090 FE axial fans for smooth, wagon-wheel-free live rotation!
+        const objName = obj.name || '';
+        if (objName.endsWith('_Blades')) {
+          if (objName.startsWith('Fan_Front_') || objName === 'Fan_Rear_Blades') {
+            this.spinningFans.push({ obj, axis: 'z', speed: objName === 'Fan_Rear_Blades' ? -7.8 : 7.2 + (this.spinningFans.length % 3) * 0.35 });
+          } else if (objName.startsWith('Fan_Top_')) {
+            this.spinningFans.push({ obj, axis: 'y', speed: 7.4 + (this.spinningFans.length % 3) * 0.3 });
+          } else if (objName.startsWith('RTX5090_AxialFan_')) {
+            this.spinningFans.push({ obj, axis: 'y', speed: objName.includes('_0_') ? 9.2 : -9.2 });
+          }
         }
       });
       pcGroup.add(pcModel);
     });
 
     // Deep grounded contact shadow directly beneath the Corsair 5000D Airflow feet & belly + subtle cyan desk spill beside tempered glass!
-    this._addContactShadow(pcGroup, 0, 0.0007, 0, 0.40, 0.68, 0.96);
-    this._addContactShadow(pcGroup, 0, 0.0012, 0, 0.28, 0.56, 1.0);
+    this._addContactShadow(pcGroup, 0, 0.0016, 0, 0.38, 0.64, 0.96);
     const pcSpillC = document.createElement('canvas');
     pcSpillC.width = pcSpillC.height = 128;
     const psc = pcSpillC.getContext('2d');
@@ -2449,10 +2537,14 @@ export class OfficeScene {
         transparent: true,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+        polygonOffsetUnits: -4,
       })
     );
     pcSpill.rotation.x = -Math.PI / 2;
-    pcSpill.position.set(-0.24, 0.0015, 0.02);
+    pcSpill.position.set(-0.24, 0.0028, 0.02);
+    pcSpill.renderOrder = 3;
     pcGroup.add(pcSpill);
     this.scene.add(pcGroup);
   }
@@ -2465,8 +2557,7 @@ export class OfficeScene {
     // 1. MikroTik CRS804-4DDQ-hRM Switch sitting ON THE DESK immediately right of the Omarchy monitor!
     const swX = 0.00;
     const swZ = -1.04;
-    this._addContactShadow(deskCluster, swX, sy + 0.0008, swZ, 0.28, 0.45, 0.88);
-    this._addContactShadow(deskCluster, swX, sy + 0.0011, swZ, 0.23, 0.40, 0.92);
+    this._addContactShadow(deskCluster, swX, sy + 0.0015, swZ, 0.27, 0.44, 0.92);
 
     this._loadGLB('assets/models/crs804.glb', (crsModel) => {
       crsModel.position.set(swX, sy, swZ);
@@ -2492,8 +2583,7 @@ export class OfficeScene {
     const sparkStepY = 0.0543;
     const stackX = 0.31;
     const stackZ = -1.08;
-    this._addContactShadow(deskCluster, stackX, sy + 0.0008, stackZ, 0.24, 0.24, 0.90);
-    this._addContactShadow(deskCluster, stackX, sy + 0.0011, stackZ, 0.175, 0.175, 0.96);
+    this._addContactShadow(deskCluster, stackX, sy + 0.0015, stackZ, 0.22, 0.22, 0.95);
 
     const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
 
@@ -2572,13 +2662,10 @@ export class OfficeScene {
       new THREE.MeshStandardMaterial({ color: 0x212732, roughness: 0.34, metalness: 0.18 }),
     ];
 
-    // Deep tight contact AO shadows beneath CRS804 chassis & rack ears, staggered breakout pods, flat desk cable loom & yellow uplink!
-    this._addContactShadow(deskCluster, swX, sy + 0.0009, swZ + 0.17, 0.29, 0.08, 0.90);
-    this._addContactShadow(deskCluster, swX - 0.04, sy + 0.0009, swZ + 0.14, 0.26, 0.20, 0.90);
-    this._addContactShadow(deskCluster, 0.145, sy + 0.0009, swZ + 0.165, 0.20, 0.18, 0.92);
-    this._addContactShadow(deskCluster, 0.185, sy + 0.0009, swZ - 0.02, 0.11, 0.40, 0.88);
-    this._addContactShadow(deskCluster, swX - 0.154, sy + 0.0009, swZ + 0.00, 0.055, 0.48, 0.86);
-    this._addContactShadow(deskCluster, swX - 0.082, sy + 0.0009, swZ + 0.222, 0.17, 0.045, 0.88);
+    // Clean non-overlapping contact AO shadows beneath staggered breakout pods & yellow uplink (stepped Y -> ZERO Z-fighting!)
+    this._addContactShadow(deskCluster, 0.155, sy + 0.0012, swZ + 0.165, 0.19, 0.16, 0.90);
+    this._addContactShadow(deskCluster, 0.185, sy + 0.0018, swZ - 0.04, 0.09, 0.34, 0.86);
+    this._addContactShadow(deskCluster, swX - 0.154, sy + 0.0018, swZ + 0.00, 0.055, 0.44, 0.84);
 
     for (let p = 0; p < 4; p++) {
       const px = swX + qsfpLocalXs[p];
@@ -2722,7 +2809,7 @@ export class OfficeScene {
 
     for (let i = 0; i < 3; i++) {
       const door = new THREE.Mesh(new RoundedBoxGeometry(0.018, 0.36, 0.40, 2, 0.003), credWoodMat);
-      door.position.set(-credW / 2 + 0.025, credH - 0.23, -0.42 + i * 0.42);
+      door.position.set(-credW / 2 + 0.018, credH - 0.23, -0.42 + i * 0.42);
       credGroup.add(door);
     }
     for (const lx of [-credW / 2 + 0.06, credW / 2 - 0.06]) {
@@ -2956,6 +3043,9 @@ export class OfficeScene {
       for (const item of this.pcEmissives) {
         const hue = (0.50 + Math.sin(elapsed * 0.45 + item.phase) * 0.08 + 1) % 1;
         item.mat.emissive.setHSL(hue, 0.78, 0.54);
+      }
+      for (const fan of this.spinningFans) {
+        fan.obj.rotation[fan.axis] += dt * fan.speed;
       }
       if (this.pcRgbLight) {
         this.pcRgbLight.color.setHex(0x5ad8fc);

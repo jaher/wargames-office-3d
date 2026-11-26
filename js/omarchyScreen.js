@@ -283,17 +283,17 @@ export class OmarchyScreen {
       rx -= 24;
     }
 
-    // 3. Authentic 21:9 Hyprland Borderless Tiled Layout (generous 24px gaps showing Tokyo Night wallpaper!)
-    const gap = 24;
+    // 3. Authentic 21:9 Hyprland Borderless Tiled Layout — Full Omarchy Wargame Terminal + Neovim + Telemetry!
+    const gap = 14;
     const topY = barH + gap;
     const availH = H - topY - gap;
-    const leftW = Math.floor((W - gap * 3) * 0.63);
+    const leftW = Math.floor((W - gap * 3) * 0.72);
     const rightX = gap * 2 + leftW;
     const rightW = W - rightX - gap;
 
-    // --- Left Active Hyprland Tile: Borderless Ghostty / Alacritty Terminal ---
+    // --- Left Active Hyprland Tile: Full Ghostty / Tmux Wargame Terminal Replica (Neovim Split + Live Shell!) ---
     ctx.save();
-    ctx.fillStyle = 'rgba(22, 22, 30, 0.90)';
+    ctx.fillStyle = 'rgba(22, 22, 30, 0.94)';
     ctx.beginPath();
     ctx.roundRect(gap, topY, leftW, availH, 10);
     ctx.fill();
@@ -306,137 +306,71 @@ export class OmarchyScreen {
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Tmux status header strip
-    const hdrH = 38;
-    ctx.fillStyle = 'rgba(31, 35, 53, 0.94)';
+    // Top Ghostty / Tmux window bar
+    const hdrH = 36;
+    const tmuxBarH = 34;
+    ctx.fillStyle = 'rgba(31, 35, 53, 0.96)';
     ctx.beginPath();
     ctx.roundRect(gap + 2, topY + 2, leftW - 4, hdrH, [8, 8, 0, 0]);
     ctx.fill();
 
+    const hasSplitCode = !!(this.state.lastVim && this.state.lastVim.lines && this.state.lastVim.lines.length > 0);
     ctx.fillStyle = TN.blue;
     ctx.font = '700 18px "JetBrains Mono", monospace';
-    ctx.fillText(`[0] ${this.state.header}`, gap + 20, topY + 26);
+    ctx.fillText(
+      hasSplitCode ? `[0] ${this.state.header}  ·  nvim ${this.state.lastVim.file} + zsh` : `[0] ${this.state.header}`,
+      gap + 18,
+      topY + 24
+    );
     ctx.fillStyle = TN.comment;
     ctx.font = '500 17px "JetBrains Mono", monospace';
     ctx.textAlign = 'right';
-    ctx.fillText(`ssh ${this.state.host}`, gap + leftW - 22, topY + 26);
+    ctx.fillText(`ssh ${this.state.host}`, gap + leftW - 18, topY + 24);
     ctx.textAlign = 'left';
 
-    const innerX = gap + 26;
-    const innerY = topY + hdrH + 14;
-    const innerW = leftW - 52;
-    const innerH = availH - hdrH - 28;
-    ctx.beginPath();
-    ctx.rect(innerX - 8, innerY - 6, innerW + 16, innerH + 12);
-    ctx.clip();
+    const bodyY = topY + hdrH + 6;
+    const bodyH = availH - hdrH - tmuxBarH - 12;
 
-    const lineH = 33;
-    ctx.font = '500 22px "JetBrains Mono", Consolas, monospace';
+    if (this.state.vim && !hasSplitCode) {
+      this._renderVimOnCanvas(ctx, this.state.vim, gap + 18, bodyY, leftW - 36, bodyH, elapsed, TN);
+    } else if (hasSplitCode) {
+      // Authentic Ultrawide Omarchy Tmux Vertical Split:
+      // Left 54%: Full Syntax-Highlighted Neovim Source File (e.g. v0.c)
+      // Right 46%: Full Live Wargame Shell Execution, Compilation & Output
+      const splitX = gap + Math.floor(leftW * 0.54);
+      const nvimX = gap + 16;
+      const nvimW = splitX - gap - 26;
+      const shX = splitX + 16;
+      const shW = gap + leftW - splitX - 28;
 
-    if (this.state.vim) {
-      this._renderVimOnCanvas(ctx, this.state.vim, innerX, innerY, innerW, innerH, elapsed, TN);
+      // Crisp tmux vertical pane divider line
+      ctx.fillStyle = 'rgba(122, 162, 247, 0.38)';
+      ctx.fillRect(splitX, topY + hdrH + 2, 2, availH - hdrH - tmuxBarH - 4);
+
+      this._renderNeovimPane(ctx, this.state.lastVim, this.state.vim, nvimX, bodyY, nvimW, bodyH, elapsed, TN);
+      this._renderShellPane(ctx, shX, bodyY, shW, bodyH, elapsed, TN, 21, 30);
     } else {
-      const renderRows = [];
-      for (const item of (this.state.lines || [])) {
-        const hl =
-          this.state.activeNarrSeg >= 0 &&
-          Array.isArray(item.segs) &&
-          item.segs.includes(this.state.activeNarrSeg);
-
-        if (item.kind === 'cmd') {
-          const full = `${item.prompt || ''}${item.text || ''}`;
-          const wrapped = this._wrapText(ctx, full, innerW - 16);
-          wrapped.forEach((w, wi) => {
-            renderRows.push({
-              kind: 'cmd',
-              promptLen: wi === 0 ? (item.prompt || '').length : 0,
-              text: w,
-              typing: item.typing && wi === wrapped.length - 1,
-              hl,
-            });
-          });
-        } else {
-          const wrapped = this._wrapText(ctx, item.text || '', innerW - 20);
-          wrapped.forEach((w) => {
-            renderRows.push({ kind: item.kind, text: w, hl });
-          });
-        }
-      }
-
-      const maxVisible = Math.max(1, Math.floor(innerH / lineH) - 1);
-      const slice = renderRows.slice(-maxVisible);
-      let y = innerY + 26;
-
-      for (const row of slice) {
-        if (row.hl) {
-          ctx.fillStyle = 'rgba(115, 218, 202, 0.16)';
-          ctx.fillRect(innerX - 8, y - 24, innerW + 16, lineH);
-          ctx.fillStyle = TN.teal;
-          ctx.fillRect(innerX - 8, y - 24, 4, lineH);
-        }
-
-        if (row.kind === 'goal') {
-          ctx.fillStyle = 'rgba(122, 162, 247, 0.12)';
-          ctx.fillRect(innerX - 6, y - 24, innerW + 12, lineH);
-          ctx.fillStyle = TN.fgBright;
-          ctx.fillText(row.text, innerX + 6, y);
-        } else if (row.kind === 'cmd') {
-          const pPart = row.text.slice(0, row.promptLen);
-          const cPart = row.text.slice(row.promptLen);
-          let cx = innerX;
-          if (pPart) {
-            ctx.fillStyle = TN.cyan;
-            ctx.fillText(pPart, cx, y);
-            cx += ctx.measureText(pPart).width;
-          }
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(cPart, cx, y);
-          cx += ctx.measureText(cPart).width;
-          if (row.typing && Math.floor(elapsed * 2.2) % 2 === 0) {
-            ctx.fillStyle = TN.blue;
-            ctx.fillRect(cx + 3, y - 21, 13, 25);
-          }
-        } else if (row.kind === 'note') {
-          ctx.fillStyle = TN.purple;
-          ctx.fillText(row.text, innerX, y);
-        } else if (row.kind === 'pw') {
-          ctx.fillStyle = TN.amber;
-          ctx.fillText(row.text, innerX, y);
-        } else {
-          if (row.text.includes('[REDACTED]')) {
-            const parts = row.text.split('[REDACTED]');
-            let cx = innerX;
-            parts.forEach((part, pi) => {
-              ctx.fillStyle = TN.green;
-              ctx.fillText(part, cx, y);
-              cx += ctx.measureText(part).width;
-              if (pi < parts.length - 1) {
-                ctx.fillStyle = TN.amber;
-                ctx.fillText('[REDACTED]', cx, y);
-                cx += ctx.measureText('[REDACTED]').width;
-              }
-            });
-          } else {
-            ctx.fillStyle = TN.green;
-            ctx.fillText(row.text, innerX, y);
-          }
-        }
-        y += lineH;
-      }
-
-      if (!slice.some((r) => r.typing)) {
-        const lastCmd = [...(this.state.lines || [])].reverse().find((l) => l.kind === 'cmd' && l.prompt);
-        const promptStr = lastCmd ? lastCmd.prompt : `${(this.state.host || 'vortex0@omarchy').split('.')[0]}:~$ `;
-        const py = Math.min(y + 4, innerY + innerH - 10);
-        ctx.fillStyle = TN.cyan;
-        ctx.fillText(promptStr, innerX, py);
-        if (Math.floor(elapsed * 2) % 2 === 0) {
-          const pw = ctx.measureText(promptStr).width;
-          ctx.fillStyle = TN.blue;
-          ctx.fillRect(innerX + pw + 2, py - 21, 13, 25);
-        }
-      }
+      // Full-width crisp interactive shell terminal for pure CLI wargame levels
+      this._renderShellPane(ctx, gap + 22, bodyY, leftW - 44, bodyH, elapsed, TN, 23, 34);
     }
+
+    // Authentic Bottom Tmux Status Bar across full Ghostty window
+    const tmY = topY + availH - tmuxBarH - 2;
+    ctx.fillStyle = 'rgba(26, 27, 38, 0.98)';
+    ctx.beginPath();
+    ctx.roundRect(gap + 2, tmY, leftW - 4, tmuxBarH, [0, 0, 8, 8]);
+    ctx.fill();
+    ctx.fillStyle = TN.blue;
+    ctx.fillRect(gap + 2, tmY, 96, tmuxBarH);
+    ctx.fillStyle = TN.bgDark;
+    ctx.font = '700 16px "JetBrains Mono", monospace';
+    ctx.fillText(' TMUX 0 ', gap + 10, tmY + 22);
+    ctx.fillStyle = TN.teal;
+    ctx.fillText(hasSplitCode ? ` 0:nvim*  1:zsh  2:otw` : ` 0:zsh*  1:otw  2:btop`, gap + 108, tmY + 22);
+    ctx.fillStyle = TN.comment;
+    ctx.textAlign = 'right';
+    ctx.fillText(`${this.state.host}  │  omarchy@workstation`, gap + leftW - 18, tmY + 22);
+    ctx.textAlign = 'left';
     ctx.restore();
 
     // --- Right Hyprland Split Tiles (Crisp, Balanced, Zero Blank Voids!) ---
@@ -467,40 +401,40 @@ export class OmarchyScreen {
       ' /_.\'    \'._\\ ',
     ];
     ctx.fillStyle = TN.blue;
-    ctx.font = '700 17px "JetBrains Mono", monospace';
+    ctx.font = '700 15px "JetBrains Mono", monospace';
     archArt.forEach((ln, idx) => {
-      ctx.fillText(ln, rightX + 20, topY + 72 + idx * 21);
+      ctx.fillText(ln, rightX + 16, topY + 70 + idx * 20);
     });
 
     ctx.fillStyle = TN.purple;
-    ctx.font = '700 22px "JetBrains Mono", monospace';
-    ctx.fillText('omarchy@workstation', rightX + 195, topY + 78);
+    ctx.font = '700 20px "JetBrains Mono", monospace';
+    ctx.fillText('omarchy@workstation', rightX + 164, topY + 76);
     ctx.fillStyle = TN.comment;
-    ctx.font = '500 16px "JetBrains Mono", monospace';
-    ctx.fillText('──────────────────────────', rightX + 195, topY + 100);
+    ctx.font = '500 15px "JetBrains Mono", monospace';
+    ctx.fillText('──────────────────────', rightX + 164, topY + 96);
     ctx.fillStyle = TN.teal;
-    ctx.font = '700 18px "JetBrains Mono", monospace';
-    ctx.fillText('Arch Linux · Hyprland 0.48', rightX + 195, topY + 126);
+    ctx.font = '700 16px "JetBrains Mono", monospace';
+    ctx.fillText('Arch Linux · Hyprland 0.48', rightX + 164, topY + 122);
     ctx.fillStyle = TN.fgBright;
-    ctx.fillText('Theme: Tokyo Night · Ghostty', rightX + 195, topY + 152);
+    ctx.fillText('Theme: Tokyo Night · Ghostty', rightX + 164, topY + 146);
     ctx.fillStyle = TN.green;
-    ctx.fillText('Kernel: 6.14.2-arch1-1', rightX + 195, topY + 178);
+    ctx.fillText('Kernel: 6.14.2-arch1-1', rightX + 164, topY + 170);
 
     const specs = [
       ['CPU', 'Intel Core Ultra 9 285K · 96GB'],
-      ['GPU', 'NVIDIA GeForce RTX 5090 FE 32GB'],
-      ['NODES', '6× DGX Spark + 2× Ascent GX10'],
-      ['FABRIC', 'MikroTik CRS804 400G QSFP56-DD'],
+      ['GPU', 'NVIDIA RTX 5090 FE 32GB'],
+      ['NODES', '6× DGX Spark + 2× GX10'],
+      ['FABRIC', 'MikroTik CRS804 400G'],
     ];
-    let sy = topY + 234;
+    let sy = topY + 230;
     for (const [k, v] of specs) {
       ctx.fillStyle = TN.blue;
-      ctx.font = '700 19px "JetBrains Mono", monospace';
-      ctx.fillText(k.padEnd(7, ' '), rightX + 24, sy);
+      ctx.font = '700 17px "JetBrains Mono", monospace';
+      ctx.fillText(k.padEnd(7, ' '), rightX + 20, sy);
       ctx.fillStyle = TN.fgBright;
-      ctx.font = '600 19px "JetBrains Mono", monospace';
-      ctx.fillText(v, rightX + 126, sy);
-      sy += 34;
+      ctx.font = '600 17px "JetBrains Mono", monospace';
+      ctx.fillText(v, rightX + 112, sy);
+      sy += 33;
     }
 
     const swatches = [TN.red, TN.green, TN.amber, TN.blue, TN.purple, TN.cyan, TN.teal, TN.fg];
@@ -524,8 +458,8 @@ export class OmarchyScreen {
     const bw = rightW - 40;
 
     ctx.fillStyle = TN.purple;
-    ctx.font = '700 17px "JetBrains Mono", monospace';
-    ctx.fillText('┌─ btop++ · system, 400G fabric & processes ──────────────', bx, botTileY + 28);
+    ctx.font = '700 16px "JetBrains Mono", monospace';
+    ctx.fillText('┌─ btop++ · system, 400G fabric & procs ──────────', bx, botTileY + 28);
 
     // 1. CPU & GPU Wave Graph
     const cpuY = botTileY + 42;
@@ -568,10 +502,10 @@ export class OmarchyScreen {
     meters.forEach(([lbl, pct, col], idx) => {
       const my = memY + 34 + idx * 32;
       ctx.fillStyle = TN.fgBright;
-      ctx.font = '700 17px "JetBrains Mono", monospace';
-      ctx.fillText(lbl, bx + 14, my);
-      const gx = bx + 275;
-      const gw = bw - 290;
+      ctx.font = '700 15.5px "JetBrains Mono", monospace';
+      ctx.fillText(lbl, bx + 12, my);
+      const gx = bx + 245;
+      const gw = bw - 258;
       ctx.fillStyle = '#24283b';
       ctx.fillRect(gx, my - 13, gw, 15);
       ctx.fillStyle = col;
@@ -590,16 +524,16 @@ export class OmarchyScreen {
     ctx.fillText('PROC · NET 200GbE (enp4s0)', bx + 16, procY + 4);
 
     const procs = [
-      ['PID    COMMAND               MEM     CPU%', TN.comment],
-      ['1042   hyprland --wayland    412M    2.1%', TN.fgBright],
-      ['1188   ghostty -e tmux       196M    0.8%', TN.cyan],
-      ['2401   ssh vortex0@otw        24M    0.2%', TN.green],
-      ['3110   dgx-spark-mesh-rdma  4.8G    9.4%', TN.amber],
+      ['PID   COMMAND             MEM    CPU%', TN.comment],
+      ['1042  hyprland --wayland  412M   2.1%', TN.fgBright],
+      ['1188  ghostty -e tmux     196M   0.8%', TN.cyan],
+      ['2401  ssh vortex0@otw      24M   0.2%', TN.green],
+      ['3110  dgx-spark-rdma      4.8G   9.4%', TN.amber],
     ];
     procs.forEach(([txt, col], idx) => {
       ctx.fillStyle = col;
-      ctx.font = idx === 0 ? '700 15px "JetBrains Mono", monospace' : '600 16px "JetBrains Mono", monospace';
-      ctx.fillText(txt, bx + 14, procY + 28 + idx * 24);
+      ctx.font = idx === 0 ? '700 14px "JetBrains Mono", monospace' : '600 15px "JetBrains Mono", monospace';
+      ctx.fillText(txt, bx + 12, procY + 28 + idx * 24);
     });
 
     // 4. Compact Mission / Live Narration Footer Box
@@ -666,5 +600,201 @@ export class OmarchyScreen {
     ctx.fillText(vim.status || vim.file, x + 112, y + h - 44);
     ctx.fillStyle = TN.amber;
     ctx.fillText(vim.mode || '', x + 10, y + h - 10);
+  }
+
+  _colorForCodeLine(line, TN) {
+    const t = (line || '').trim();
+    if (!t) return TN.fg;
+    if (t.startsWith('#include') || t.startsWith('#define') || t.startsWith('import ') || t.startsWith('from ')) return TN.purple;
+    if (t.startsWith('/*') || t.startsWith('//') || t.startsWith('*') || t.startsWith('#')) return TN.comment;
+    if (/^(int|void|char|unsigned|struct|ssize_t|size_t|uint32_t|return|if|for|while|def|class)\b/.test(t)) return TN.cyan;
+    if (t.includes('"') || t.includes("'")) return TN.green;
+    return TN.fgBright;
+  }
+
+  _renderNeovimPane(ctx, lastVim, activeVim, x, y, w, h, elapsed, TN) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x - 6, y - 4, w + 12, h + 8);
+    ctx.clip();
+
+    // Neovim buffer tab bar
+    ctx.fillStyle = 'rgba(26, 27, 38, 0.96)';
+    ctx.fillRect(x - 6, y, w + 12, 28);
+    ctx.fillStyle = TN.blue;
+    ctx.fillRect(x - 6, y, 168, 28);
+    ctx.fillStyle = TN.bgDark;
+    ctx.font = '700 15px "JetBrains Mono", monospace';
+    ctx.fillText(`  ${lastVim.file}  `, x, y + 19);
+    ctx.fillStyle = TN.comment;
+    ctx.fillText('  [utf-8 · unix · c]', x + 178, y + 19);
+
+    const rowH = 26;
+    const lualineH = 30;
+    const codeY = y + 36;
+    const maxRows = Math.max(1, Math.floor((h - 38 - lualineH) / rowH));
+    ctx.font = '500 18.5px "JetBrains Mono", Consolas, monospace';
+
+    // Show live typing window if actively editing, else show the complete full file cleanly from line 1!
+    const allLines = lastVim.lines || [];
+    const activeNum = lastVim.activeLine || 1;
+    let startIdx = 0;
+    if (lastVim.editing && activeNum > maxRows - 3) {
+      startIdx = Math.max(0, activeNum - (maxRows - 3));
+    }
+    const visible = allLines.slice(startIdx, startIdx + maxRows);
+
+    let ry = codeY + 18;
+    for (const ln of visible) {
+      const isCur = lastVim.editing && ln.num === activeNum;
+      if (isCur) {
+        ctx.fillStyle = 'rgba(122, 162, 247, 0.14)';
+        ctx.fillRect(x - 4, ry - 19, w + 8, rowH);
+      }
+      ctx.fillStyle = isCur ? TN.blue : TN.gutter;
+      ctx.fillText(String(ln.num).padStart(3, ' '), x, ry);
+      ctx.fillStyle = this._colorForCodeLine(ln.text, TN);
+      const clipped = ln.text.length > 68 ? `${ln.text.slice(0, 67)}…` : ln.text;
+      ctx.fillText(clipped, x + 52, ry);
+      if (isCur && Math.floor(elapsed * 2.6) % 2 === 0) {
+        const tw = ctx.measureText(clipped).width;
+        ctx.fillStyle = TN.blue;
+        ctx.fillRect(x + 54 + tw, ry - 17, 10, 21);
+      }
+      ry += rowH;
+    }
+
+    // Fill remaining rows with authentic Vim ~ tildes
+    for (let k = visible.length; k < maxRows; k++) {
+      ctx.fillStyle = TN.gutter;
+      ctx.fillText('  ~', x, ry);
+      ry += rowH;
+    }
+
+    // Authentic Neovim Lualine Status Bar at bottom of editor pane
+    const ly = y + h - lualineH;
+    ctx.fillStyle = TN.bgFloat;
+    ctx.fillRect(x - 6, ly, w + 12, lualineH);
+    const isIns = (lastVim.mode || '').includes('INSERT');
+    ctx.fillStyle = isIns ? TN.green : TN.purple;
+    ctx.fillRect(x - 6, ly, 104, lualineH);
+    ctx.fillStyle = TN.bgDark;
+    ctx.font = '700 15px "JetBrains Mono", monospace';
+    ctx.fillText(isIns ? ' INSERT ' : ' NORMAL ', x + 4, ly + 20);
+    ctx.fillStyle = TN.fgBright;
+    ctx.fillText(` ${lastVim.file}  │  ${allLines.length} lines`, x + 108, ly + 20);
+    ctx.fillStyle = TN.cyan;
+    ctx.textAlign = 'right';
+    ctx.fillText(`Ln ${activeNum}, Col 1  100% `, x + w + 2, ly + 20);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
+  _renderShellPane(ctx, innerX, innerY, innerW, innerH, elapsed, TN, fontSize = 22, lineH = 32) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(innerX - 8, innerY - 4, innerW + 16, innerH + 8);
+    ctx.clip();
+
+    ctx.font = `500 ${fontSize}px "JetBrains Mono", Consolas, monospace`;
+    const renderRows = [];
+    for (const item of (this.state.lines || [])) {
+      const hl =
+        this.state.activeNarrSeg >= 0 &&
+        Array.isArray(item.segs) &&
+        item.segs.includes(this.state.activeNarrSeg);
+
+      if (item.kind === 'cmd') {
+        const full = `${item.prompt || ''}${item.text || ''}`;
+        const wrapped = this._wrapText(ctx, full, innerW - 12);
+        wrapped.forEach((w, wi) => {
+          renderRows.push({
+            kind: 'cmd',
+            promptLen: wi === 0 ? (item.prompt || '').length : 0,
+            text: w,
+            typing: item.typing && wi === wrapped.length - 1,
+            hl,
+          });
+        });
+      } else {
+        const wrapped = this._wrapText(ctx, item.text || '', innerW - 16);
+        wrapped.forEach((w) => {
+          renderRows.push({ kind: item.kind, text: w, hl });
+        });
+      }
+    }
+
+    const maxVisible = Math.max(1, Math.floor(innerH / lineH) - 1);
+    const slice = renderRows.slice(-maxVisible);
+    let y = innerY + lineH - 6;
+
+    for (const row of slice) {
+      if (row.hl) {
+        ctx.fillStyle = 'rgba(115, 218, 202, 0.16)';
+        ctx.fillRect(innerX - 6, y - fontSize, innerW + 12, lineH);
+        ctx.fillStyle = TN.teal;
+        ctx.fillRect(innerX - 6, y - fontSize, 4, lineH);
+      }
+
+      if (row.kind === 'goal') {
+        ctx.fillStyle = 'rgba(122, 162, 247, 0.14)';
+        ctx.fillRect(innerX - 6, y - fontSize, innerW + 12, lineH);
+        ctx.fillStyle = TN.fgBright;
+        ctx.fillText(row.text, innerX + 4, y);
+      } else if (row.kind === 'cmd') {
+        const pPart = row.text.slice(0, row.promptLen);
+        const cPart = row.text.slice(row.promptLen);
+        let cx = innerX;
+        if (pPart) {
+          ctx.fillStyle = TN.cyan;
+          ctx.fillText(pPart, cx, y);
+          cx += ctx.measureText(pPart).width;
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(cPart, cx, y);
+        cx += ctx.measureText(cPart).width;
+        if (row.typing && Math.floor(elapsed * 2.2) % 2 === 0) {
+          ctx.fillStyle = TN.blue;
+          ctx.fillRect(cx + 3, y - fontSize + 2, 12, fontSize + 3);
+        }
+      } else if (row.kind === 'note') {
+        ctx.fillStyle = TN.purple;
+        ctx.fillText(row.text, innerX, y);
+      } else if (row.kind === 'pw') {
+        ctx.fillStyle = TN.amber;
+        ctx.fillText(row.text, innerX, y);
+      } else if (row.text.includes('[REDACTED]')) {
+        const parts = row.text.split('[REDACTED]');
+        let cx = innerX;
+        parts.forEach((part, pi) => {
+          ctx.fillStyle = TN.green;
+          ctx.fillText(part, cx, y);
+          cx += ctx.measureText(part).width;
+          if (pi < parts.length - 1) {
+            ctx.fillStyle = TN.amber;
+            ctx.fillText('[REDACTED]', cx, y);
+            cx += ctx.measureText('[REDACTED]').width;
+          }
+        });
+      } else {
+        ctx.fillStyle = TN.green;
+        ctx.fillText(row.text, innerX, y);
+      }
+      y += lineH;
+    }
+
+    if (!slice.some((r) => r.typing)) {
+      const lastCmd = [...(this.state.lines || [])].reverse().find((l) => l.kind === 'cmd' && l.prompt);
+      const promptStr = lastCmd ? lastCmd.prompt : `${(this.state.host || 'vortex0@omarchy').split('.')[0]}:~$ `;
+      const py = Math.min(y + 4, innerY + innerH - 10);
+      ctx.fillStyle = TN.cyan;
+      ctx.fillText(promptStr, innerX, py);
+      if (Math.floor(elapsed * 2) % 2 === 0) {
+        const pw = ctx.measureText(promptStr).width;
+        ctx.fillStyle = TN.blue;
+        ctx.fillRect(innerX + pw + 2, py - fontSize + 2, 12, fontSize + 3);
+      }
+    }
+    ctx.restore();
   }
 }

@@ -12,10 +12,16 @@ Crafted to match real product photographs of:
 import math
 import os
 import random
+import sys
 import bpy
 import bmesh
 from mathutils import Vector, Matrix, Euler
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+from build_rtx5090_fe import build_rtx5090_fe_at, GPU_L as FE_GPU_L, GPU_W as FE_GPU_W, GPU_H as FE_GPU_H
 
 MM = 0.001
 CASE_W = 245.0 * MM
@@ -23,9 +29,9 @@ CASE_D = 520.0 * MM
 CASE_H = 520.0 * MM
 FOOT_H = 26.0 * MM  # Authentic Corsair 5000D ~26mm angled desk clearance
 
-GPU_L = 304.0 * MM
-GPU_W = 137.0 * MM
-GPU_H = 28.0 * MM  # Razor-sleek authentic 2-slot RTX 5090 Founders Edition unibody profile
+GPU_L = FE_GPU_L    # 304.0 mm exact NVIDIA GeForce RTX 5090 Founders Edition length
+GPU_W = FE_GPU_W    # 137.0 mm exact NVIDIA GeForce RTX 5090 Founders Edition width
+GPU_H = FE_GPU_H    # 40.0 mm exact 2.0-slot NVIDIA GeForce RTX 5090 Founders Edition thickness
 
 OUT_DIR = os.path.abspath("/workspace/assets/blender")
 TEX_DIR = os.path.join(OUT_DIR, "textures")
@@ -95,17 +101,22 @@ def generate_textures():
     grille_front.save(p_grille)
     grille_top.save(p_top_grille)
 
-    # 1b. Fine-grain brushed anisotropic metallic roughness texture (gives VRM, chipset & RTX 5090 gunmetal realistic directional sheen!)
+    # 1b. Fine-grain brushed anisotropic metallic roughness texture (VRM/chipset) + fine isotropic powder-coat micro-grain texture (5000D steel!)
     rng_pr = random.Random(5000)
     pr_sz = 256
     pr_img = Image.new("L", (pr_sz, pr_sz), 118)
     pr_px = pr_img.load()
+    iso_img = Image.new("L", (pr_sz, pr_sz), 156)
+    iso_px = iso_img.load()
     for py in range(pr_sz):
         row_shift = int(rng_pr.gauss(0, 14))
         for px in range(pr_sz):
             pr_px[px, py] = max(72, min(168, 118 + row_shift + int(rng_pr.gauss(0, 5))))
+            iso_px[px, py] = max(132, min(186, 156 + int(rng_pr.gauss(0, 11))))
     p_powder_rgh = os.path.join(TEX_DIR, "corsair_powder_rough.png")
+    p_powder_iso = os.path.join(TEX_DIR, "corsair_powder_iso_rough.png")
     pr_img.save(p_powder_rgh)
+    iso_img.save(p_powder_iso)
 
     # 1c. Diffused Corsair iCUE LINK RX120 RGB Side Window Texture (soft cyan-teal diffuser behind dark trim, ZERO flat white bar!)
     rxw, rxh = 512, 96
@@ -149,13 +160,14 @@ def generate_textures():
     p_rad_fins = os.path.join(TEX_DIR, "corsair_rad_fins.png")
     rad_img.save(p_rad_fins)
 
-    # 4. Deep Matte Woven-Nylon Braided Sleeve Texture for AIO Coolant Hoses (true matte carbon-black nylon weave, NEVER glossy grey plastic!)
+    # 4. Crisp Matte Woven-Nylon Braided Sleeve Texture for AIO Coolant Hoses & Sleeved Cables (visible paracord weave!)
     bw_s = 512
-    braid_img = Image.new("RGB", (bw_s, bw_s), (9, 10, 13))
+    braid_img = Image.new("RGB", (bw_s, bw_s), (12, 14, 18))
     bd = ImageDraw.Draw(braid_img)
-    for k in range(-bw_s, bw_s * 2, 10):
-        bd.line((k, 0, k + bw_s, bw_s), fill=(22, 25, 31), width=3)
-        bd.line((k, bw_s, k + bw_s, 0), fill=(5, 6, 8), width=3)
+    for k in range(-bw_s, bw_s * 2, 12):
+        bd.line((k, 0, k + bw_s, bw_s), fill=(36, 40, 48), width=4)
+        bd.line((k + 3, 0, k + 3 + bw_s, bw_s), fill=(22, 25, 31), width=2)
+        bd.line((k, bw_s, k + bw_s, 0), fill=(6, 7, 10), width=4)
     p_braid = os.path.join(TEX_DIR, "corsair_braided_sleeve.png")
     braid_img.save(p_braid)
 
@@ -222,14 +234,14 @@ def generate_textures():
     p_mp700 = os.path.join(TEX_DIR, "corsair_mp700_pro.png")
     mp7_img.save(p_mp700)
 
-    mp6_img = Image.new("RGB", (1024, 192), (24, 26, 31))
+    mp6_img = Image.new("RGB", (1024, 192), (22, 25, 31))
     mp6d = ImageDraw.Draw(mp6_img)
-    # Authentic Corsair matte-black + Corsair-yellow corner accent stripe M.2 NVMe sticker (ZERO glowing cyan!)
-    mp6d.rectangle((0, 0, 118, 192), fill=(198, 156, 36))
-    mp6d.polygon([(118, 0), (156, 0), (118, 192)], fill=(198, 156, 36))
-    mp6d.rectangle((14, 14, 1010, 178), outline=(74, 78, 88), width=4)
-    mp6d.text((575, 72), "CORSAIR  MP600 CORE XT", fill=(236, 240, 248), font=f_m2, anchor="mm")
-    mp6d.text((575, 134), "R2  ·  1TB  PCIe Gen4 x4 NVMe M.2", fill=(168, 176, 190), font=f_sm, anchor="mm")
+    # Authentic Corsair matte-black + sleek restrained technical stripes M.2 NVMe label (clearly legible below GPU, ZERO stray yellow block!)
+    mp6d.rectangle((0, 0, 56, 192), fill=(36, 40, 48))
+    mp6d.polygon([(56, 0), (88, 0), (56, 192)], fill=(186, 148, 38))
+    mp6d.rectangle((14, 14, 1010, 178), outline=(92, 98, 112), width=5)
+    mp6d.text((558, 72), "CORSAIR  MP600 CORE XT", fill=(242, 246, 254), font=f_m2, anchor="mm")
+    mp6d.text((558, 134), "R2  ·  1TB  PCIe Gen4 x4 NVMe M.2", fill=(184, 194, 210), font=f_sm, anchor="mm")
     p_mp600 = os.path.join(TEX_DIR, "corsair_mp600_core_xt.png")
     mp6_img.save(p_mp600)
 
@@ -382,7 +394,7 @@ def generate_textures():
     blade_col.save(p_rx_blade_col)
     blade_em.save(p_rx_blade_em)
 
-    return p_grille, p_top_grille, p_powder_rgh, p_rx_side, p_rx_blade_col, p_rx_blade_em, p_psu_top, p_rad_fins, p_braid, p_corsair, p_gpu_side, p_gpu_top, p_mp700, p_mp600, p_io_tex, p_ram_tex, p_hx1500i, p_mobo, p_lcd
+    return p_grille, p_top_grille, p_powder_rgh, p_powder_iso, p_rx_side, p_rx_blade_col, p_rx_blade_em, p_psu_top, p_rad_fins, p_braid, p_corsair, p_gpu_side, p_gpu_top, p_mp700, p_mp600, p_io_tex, p_ram_tex, p_hx1500i, p_mobo, p_lcd
 
 
 def make_mat(name, color, metallic=0.75, roughness=0.38, emit=None, emit_strength=0.0, alpha=1.0, rough_tex=None):
@@ -497,7 +509,7 @@ def add_bezier_tube(name, p0, p1, p2, p3, radius, mat, steps=28):
 
 
 def add_curved_fan_blades(name, loc, axis, mat, count=9):
-    """Build high-poly silky-smooth swept aerodynamic airfoil impeller blades in bmesh with radial hub-to-tip UVs."""
+    """Build high-poly swept airfoil impeller blades centered at LOCAL origin (0,0,0) with obj.location = loc so they spin cleanly in Three.js!"""
     bm = bmesh.new()
     uv_layer = bm.loops.layers.uv.new("UVMap")
     for b in range(count):
@@ -517,13 +529,13 @@ def add_curved_fan_blades(name, loc, axis, mat, count=9):
                 d_tan = s * chord * math.cos(twist)
                 d_ax = s * chord * math.sin(twist) + camber
                 if axis == "Y":
-                    vx = loc[0] + ca * r + tx * d_tan
-                    vy = loc[1] + d_ax
-                    vz = loc[2] + sa * r + ty * d_tan
+                    vx = ca * r + tx * d_tan
+                    vy = d_ax
+                    vz = sa * r + ty * d_tan
                 else:
-                    vx = loc[0] + ca * r + tx * d_tan
-                    vy = loc[1] + sa * r + ty * d_tan
-                    vz = loc[2] + d_ax
+                    vx = ca * r + tx * d_tan
+                    vy = sa * r + ty * d_tan
+                    vz = d_ax
                 ring_v.append(bm.verts.new((vx, vy, vz)))
             rings.append(ring_v)
         n_r = len(rings) - 1
@@ -541,6 +553,7 @@ def add_curved_fan_blades(name, loc, axis, mat, count=9):
     bm.to_mesh(me)
     bm.free()
     obj = bpy.data.objects.new(name, me)
+    obj.location = loc
     bpy.context.scene.collection.objects.link(obj)
     obj.data.materials.append(mat)
     sol = obj.modifiers.new("Solidify", "SOLIDIFY")
@@ -552,12 +565,12 @@ def add_curved_fan_blades(name, loc, axis, mat, count=9):
 
 def build_corsair_rtx5090():
     clear_scene()
-    p_grille, p_top_grille, p_powder_rgh, p_rx_side, p_rx_blade_col, p_rx_blade_em, p_psu_top, p_rad_fins, p_braid, p_corsair, p_gpu_side, p_gpu_top, p_mp700, p_mp600, p_io_tex, p_ram_tex, p_hx1500i, p_mobo, p_lcd = generate_textures()
+    p_grille, p_top_grille, p_powder_rgh, p_powder_iso, p_rx_side, p_rx_blade_col, p_rx_blade_em, p_psu_top, p_rad_fins, p_braid, p_corsair, p_gpu_side, p_gpu_top, p_mp700, p_mp600, p_io_tex, p_ram_tex, p_hx1500i, p_mobo, p_lcd = generate_textures()
 
-    # Photorealistic PBR materials: subtle micro-roughness powder-coated 5000D steel + anisotropic brushed titanium/aluminum!
-    steel_matte = make_mat("Corsair_MatteSteel", (0.044, 0.049, 0.058), metallic=0.46, roughness=0.52, rough_tex=p_powder_rgh)
-    steel_dark = make_mat("Corsair_DarkInterior", (0.014, 0.017, 0.022), metallic=0.30, roughness=0.74)
-    psu_powder = make_mat("Corsair_MattePowderCoat", (0.017, 0.020, 0.025), metallic=0.14, roughness=0.86)
+    # Photorealistic PBR materials: authentic fine isotropic powder-coated 5000D steel (micro-grain texture, ZERO streaks or flat plastic!)
+    steel_matte = make_mat("Corsair_MatteSteel", (0.038, 0.043, 0.052), metallic=0.40, roughness=0.58, rough_tex=p_powder_iso)
+    steel_dark = make_mat("Corsair_DarkInterior", (0.015, 0.018, 0.024), metallic=0.34, roughness=0.72, rough_tex=p_powder_iso)
+    psu_powder = make_mat("Corsair_MattePowderCoat", (0.019, 0.022, 0.028), metallic=0.22, roughness=0.76, rough_tex=p_powder_iso)
     cable_bar_black = make_mat("Corsair_RapidRouteMatte", (0.012, 0.014, 0.018), metallic=0.10, roughness=0.84)
     rubber_grommet = make_mat("Corsair_RubberGrommet", (0.010, 0.012, 0.015), metallic=0.0, roughness=0.94)
     # Real NVIDIA GeForce RTX 5090 FE dark satin gunmetal/titanium anodized aluminum with brushed micro-roughness!
@@ -610,7 +623,7 @@ def build_corsair_rtx5090():
     badge_mat = make_tex_mat("Corsair_Badge", p_corsair, metallic=0.50, roughness=0.38)
     mobo_mat = make_tex_mat("Mobo_PCB", p_mobo, metallic=0.24, roughness=0.44)
     mp700_mat = make_tex_mat("Corsair_MP700Pro", p_mp700, metallic=0.58, roughness=0.34, emit_strength=0.10)
-    mp600_mat = make_tex_mat("Corsair_MP600CoreXT", p_mp600, metallic=0.14, roughness=0.46, emit_strength=0.08)
+    mp600_mat = make_tex_mat("Corsair_MP600CoreXT", p_mp600, metallic=0.20, roughness=0.40, emit_strength=0.16)
     rear_io_mat = make_tex_mat("Mobo_RearIOTex", p_io_tex, metallic=0.82, roughness=0.28)
     ram_side_mat = make_tex_mat("Corsair_VengeanceSide", p_ram_tex, metallic=0.62, roughness=0.34, emit_strength=0.08)
     hx1500i_mat = make_tex_mat("Corsair_HX1500iSide", p_hx1500i, metallic=0.32, roughness=0.42, emit_strength=0.12)
@@ -630,12 +643,12 @@ def build_corsair_rtx5090():
             add_box(f"FootTrim_{fx:.2f}_{fy:.2f}", (38 * MM, 76 * MM, 4.0 * MM), (fx, fy, FOOT_H - 2.0 * MM), steel_dark, bevel=1.0 * MM)
             add_box(f"FootPad_{fx:.2f}_{fy:.2f}", (30 * MM, 64 * MM, 3.5 * MM), (fx, fy, 1.75 * MM), rubber_grommet)
 
-    # 2. Micro-Beveled Corsair 5000D Airflow Outer Frame (front = -Y, rear = +Y, glass left = -X, solid right = +X)
-    add_box("Case_Bottom", (W, D, 16 * MM), (0, 0, z0 + 8 * MM), steel_matte, bevel=3.5 * MM, segments=3)
-    add_box("Case_TopLeft", (26 * MM, D, 18 * MM), (-W * 0.5 + 13 * MM, 0, z0 + H - 9 * MM), steel_matte, bevel=3.5 * MM, segments=3)
-    add_box("Case_TopRight", (26 * MM, D, 18 * MM), (W * 0.5 - 13 * MM, 0, z0 + H - 9 * MM), steel_matte, bevel=3.5 * MM, segments=3)
-    add_box("Case_TopFrontIO", (W, 76 * MM, 18 * MM), (0, -D * 0.5 + 38 * MM, z0 + H - 9 * MM), steel_matte, bevel=3.5 * MM, segments=3)
-    add_box("Case_TopRear", (W, 42 * MM, 18 * MM), (0, D * 0.5 - 21 * MM, z0 + H - 9 * MM), steel_matte, bevel=3.5 * MM, segments=3)
+    # 2. Micro-Beveled Corsair 5000D Airflow Outer Frame (clean non-overlapping joins -> ZERO coplanar Z-fighting!)
+    add_box("Case_Bottom", (W - 2 * MM, D - 40 * MM, 16 * MM), (0, 6 * MM, z0 + 8 * MM), steel_matte, bevel=3.0 * MM, segments=3)
+    add_box("Case_TopLeft", (26 * MM, D - 120 * MM, 18 * MM), (-W * 0.5 + 13 * MM, 17 * MM, z0 + H - 9 * MM), steel_matte, bevel=3.0 * MM, segments=3)
+    add_box("Case_TopRight", (26 * MM, D - 120 * MM, 18 * MM), (W * 0.5 - 13 * MM, 17 * MM, z0 + H - 9 * MM), steel_matte, bevel=3.0 * MM, segments=3)
+    add_box("Case_TopFrontIO", (W, 52 * MM, 18 * MM), (0, -D * 0.5 + 52 * MM, z0 + H - 9 * MM), steel_matte, bevel=3.0 * MM, segments=3)
+    add_box("Case_TopRear", (W - 2 * MM, 28 * MM, 18 * MM), (0, D * 0.5 - 28 * MM, z0 + H - 9 * MM), steel_matte, bevel=3.0 * MM, segments=3)
 
     # Top-Front Recessed 5000D I/O Panel with Clearly Visible Corsair Yellow USB-A Ports + USB-C + Power Button!
     io_z = z0 + H + 0.6 * MM
@@ -666,9 +679,10 @@ def build_corsair_rtx5090():
     top_mesh.data.materials.append(top_grille_mat)
 
     # Right panel, Rear panel, Motherboard tray, Perforated Rear Exhaust Grille & Detailed Rear PCIe Expansion Brackets!
-    add_box("Case_RightPanel", (14 * MM, D, H), (W * 0.5 - 7 * MM, 0, z0 + H * 0.5), steel_matte, bevel=3.0 * MM)
+    # Cleanly trimmed inside front/rear posts so ZERO coplanar outer faces overlap!
+    add_box("Case_RightPanel", (14 * MM, D - 42 * MM, H - 38 * MM), (W * 0.5 - 7 * MM, 6 * MM, z0 + H * 0.5), steel_matte, bevel=2.5 * MM)
     add_box("Case_RearPanel", (W, 14 * MM, H), (0, D * 0.5 - 7 * MM, z0 + H * 0.5), steel_matte, bevel=3.0 * MM)
-    add_box("Case_MoboTray", (4 * MM, D - 40 * MM, H - 36 * MM), (W * 0.5 - 32 * MM, 0, z0 + H * 0.5), steel_dark)
+    add_box("Case_MoboTray", (4 * MM, D - 44 * MM, H - 38 * MM), (W * 0.5 - 32 * MM, 0, z0 + H * 0.5), steel_dark)
 
     bpy.ops.mesh.primitive_plane_add(size=1.0, location=(0, D * 0.5 - 15.6 * MM, z0 + 372 * MM))
     r_grille = bpy.context.active_object
@@ -678,23 +692,26 @@ def build_corsair_rtx5090():
     bpy.ops.object.transform_apply(rotation=True, scale=True)
     r_grille.data.materials.append(top_grille_mat)
 
+    # 7 rear PCIe expansion slots — omit slots 5 & 6 cleanly where the 2-slot RTX 5090 FE I/O bracket bolts flush at PCIe_1!
     for s in range(7):
+        if s in (5, 6):
+            continue
         sz = z0 + 136 * MM + s * 19.5 * MM
         add_box(f"Rear_PCIeSlot_{s}", (108 * MM, 5 * MM, 13 * MM), (-18 * MM, D * 0.5 - 15.5 * MM, sz), steel_matte, bevel=0.8 * MM)
         add_box(f"Rear_PCIeVent_{s}", (80 * MM, 6 * MM, 5.5 * MM), (-18 * MM, D * 0.5 - 16.0 * MM, sz), rubber_grommet)
         add_cyl(f"Rear_PCIeScrew_{s}", 2.2 * MM, 4 * MM, (-68 * MM, D * 0.5 - 18.0 * MM, sz), (math.pi / 2, 0, 0), fe_trim, 12)
 
-    # Flush Left (-X) Tempered Glass Perimeter Frame + Front/Rear Steel Pillars
-    add_box("Case_GlassTopRail", (12 * MM, D, 18 * MM), (-W * 0.5 + 6 * MM, 0, z0 + H - 9 * MM), steel_matte, bevel=2.5 * MM)
-    add_box("Case_GlassBotRail", (12 * MM, D, 18 * MM), (-W * 0.5 + 6 * MM, 0, z0 + 9 * MM), steel_matte, bevel=2.5 * MM)
-    add_box("Case_GlassFrontRail", (12 * MM, 18 * MM, H), (-W * 0.5 + 6 * MM, -D * 0.5 + 9 * MM, z0 + H * 0.5), steel_matte, bevel=2.5 * MM)
-    add_box("Case_GlassRearRail", (12 * MM, 18 * MM, H), (-W * 0.5 + 6 * MM, D * 0.5 - 9 * MM, z0 + H * 0.5), steel_matte, bevel=2.5 * MM)
+    # Flush Left (-X) Tempered Glass Perimeter Frame (trimmed strictly inside Front/Rear posts -> ZERO coplanar Z-fighting!)
+    add_box("Case_GlassTopRail", (12 * MM, D - 42 * MM, 16 * MM), (-W * 0.5 + 6.5 * MM, 6 * MM, z0 + H - 10 * MM), steel_matte, bevel=2.0 * MM)
+    add_box("Case_GlassBotRail", (12 * MM, D - 42 * MM, 16 * MM), (-W * 0.5 + 6.5 * MM, 6 * MM, z0 + 10 * MM), steel_matte, bevel=2.0 * MM)
+    add_box("Case_GlassFrontRail", (12 * MM, 16 * MM, H - 36 * MM), (-W * 0.5 + 6.5 * MM, -D * 0.5 + 34 * MM, z0 + H * 0.5), steel_matte, bevel=2.0 * MM)
+    add_box("Case_GlassRearRail", (12 * MM, 16 * MM, H - 36 * MM), (-W * 0.5 + 6.5 * MM, D * 0.5 - 22 * MM, z0 + H * 0.5), steel_matte, bevel=2.0 * MM)
 
-    # Front (-Y) Removable Stamped Steel Airflow Panel with Shadow Seam + Crisp Alpha-Cutout Triangular Mesh + Yellow Tab
-    add_box("Front_LeftPost", (22 * MM, 26 * MM, H), (-W * 0.5 + 11 * MM, -D * 0.5 + 13 * MM, z0 + H * 0.5), steel_matte, bevel=3.5 * MM)
-    add_box("Front_RightPost", (22 * MM, 26 * MM, H), (W * 0.5 - 11 * MM, -D * 0.5 + 13 * MM, z0 + H * 0.5), steel_matte, bevel=3.5 * MM)
-    add_box("Front_TopBezel", (W, 26 * MM, 36 * MM), (0, -D * 0.5 + 13 * MM, z0 + H - 18 * MM), steel_matte, bevel=3.5 * MM)
-    add_box("Front_BotBezel", (W, 26 * MM, 54 * MM), (0, -D * 0.5 + 13 * MM, z0 + 27 * MM), steel_matte, bevel=3.5 * MM)
+    # Front (-Y) Removable Stamped Steel Airflow Panel (cleanly non-overlapping posts & top/bot bezels -> ZERO corner Z-fighting!)
+    add_box("Front_LeftPost", (22 * MM, 26 * MM, H - 90 * MM), (-W * 0.5 + 11 * MM, -D * 0.5 + 13 * MM, z0 + H * 0.5 + 9 * MM), steel_matte, bevel=2.5 * MM)
+    add_box("Front_RightPost", (22 * MM, 26 * MM, H - 90 * MM), (W * 0.5 - 11 * MM, -D * 0.5 + 13 * MM, z0 + H * 0.5 + 9 * MM), steel_matte, bevel=2.5 * MM)
+    add_box("Front_TopBezel", (W, 26 * MM, 36 * MM), (0, -D * 0.5 + 13 * MM, z0 + H - 18 * MM), steel_matte, bevel=3.0 * MM)
+    add_box("Front_BotBezel", (W, 26 * MM, 54 * MM), (0, -D * 0.5 + 13 * MM, z0 + 27 * MM), steel_matte, bevel=3.0 * MM)
     add_box("Front_PanelSeamL", (3 * MM, 28 * MM, H - 90 * MM), (-W * 0.5 + 21 * MM, -D * 0.5 + 12 * MM, z0 + H * 0.5 + 10 * MM), rubber_grommet)
     # Molded matte vulcanized-silicone Corsair yellow accent pull-tab tucked cleanly into bezel corner
     add_box("Front_YellowTabBase", (5 * MM, 11 * MM, 16 * MM), (-W * 0.5 + 2.5 * MM, -D * 0.5 + 18 * MM, z0 + 78 * MM), rubber_grommet, bevel=0.8 * MM)
@@ -737,15 +754,15 @@ def build_corsair_rtx5090():
     bpy.ops.object.transform_apply(rotation=True, scale=True)
     hx_pl.data.materials.append(hx1500i_mat)
 
-    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(4 * MM, 6 * MM, shroud_top_z + 0.4 * MM))
+    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(4 * MM, 6 * MM, shroud_top_z + 1.4 * MM))
     psu_vent = bpy.context.active_object
     psu_vent.name = "PSU_ShroudTopVent"
     psu_vent.scale = (W - 36 * MM, D - 44 * MM, 1.0)
     bpy.ops.object.transform_apply(scale=True)
     psu_vent.data.materials.append(psu_top_mat)
 
-    # Recessed black rubber PSU shroud grommet positioned CLEANLY forward of MP600 beneath the 45° 12V-2x6 cable sweep!
-    grom_x, grom_y = -36 * MM, -64 * MM
+    # Recessed black rubber PSU shroud grommet positioned CLEANLY forward of MP600 beneath the natural 45° 12V-2x6 cable arc!
+    grom_x, grom_y = -40 * MM, -70 * MM
     add_box("PSU_CableGrommetRim", (26 * MM, 36 * MM, 3.2 * MM), (grom_x, grom_y, shroud_top_z + 1.0 * MM), rubber_grommet, bevel=1.4 * MM)
     add_box("PSU_CableGrommetSlot", (16 * MM, 24 * MM, 3.8 * MM), (grom_x, grom_y, shroud_top_z + 1.2 * MM), fe_fin)
 
@@ -790,45 +807,47 @@ def build_corsair_rtx5090():
         add_cyl(f"Mobo_Cap_{k}", 2.8 * MM, 10 * MM, (mb_x - 9.5 * MM, cy_v, z0 + 369 * MM), (0, math.pi / 2, 0), fe_trim, 14)
 
     # Exact ORIGIN PC #694619 Dual M.2 NVMe Storage Drives VISIBLY Modeled on MSI PRO Z890-P WIFI:
-    # 1) Upper M.2_1: Corsair MP700 PRO 4TB (PCIe Gen5 x4) with TALL 30mm finned extruded aluminum Gen5 heatsink clearly visible above GPU!
+    # 1) Upper M.2_1: Corsair MP700 PRO 4TB (PCIe Gen5 x4) with dark anodized finned Gen5 heatsink (ZERO specular aliasing!)
     add_box("SSD_MP700PRO_Base", (26 * MM, 90 * MM, 25 * MM), (mb_x - 16 * MM, 118 * MM, z0 + 278 * MM), steel_dark, bevel=1.8 * MM)
-    for fk in range(7):
-        fz_fin = z0 + 267.5 * MM + fk * 3.5 * MM
-        add_box(f"SSD_MP700PRO_Fin_{fk}", (31 * MM, 88 * MM, 1.5 * MM), (mb_x - 18.5 * MM, 118 * MM, fz_fin), vrm_dark, bevel=0.3 * MM)
-        add_box(f"SSD_MP700PRO_FinTip_{fk}", (1.6 * MM, 86 * MM, 1.0 * MM), (mb_x - 34.2 * MM, 118 * MM, fz_fin), fe_trim)
-    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(mb_x - 34.6 * MM, 118 * MM, z0 + 278 * MM))
+    for fk in range(6):
+        fz_fin = z0 + 268.0 * MM + fk * 4.0 * MM
+        add_box(f"SSD_MP700PRO_Fin_{fk}", (31 * MM, 88 * MM, 1.8 * MM), (mb_x - 18.5 * MM, 118 * MM, fz_fin), vrm_dark, bevel=0.3 * MM)
+    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(mb_x - 34.4 * MM, 118 * MM, z0 + 278 * MM))
     m7p = bpy.context.active_object
     m7p.name = "SSD_MP700PRO_Label"
-    m7p.scale = (74 * MM, 14 * MM, 1.0)
+    m7p.scale = (76 * MM, 15 * MM, 1.0)
     m7p.rotation_euler = (math.pi / 2, 0, -math.pi / 2)
     bpy.ops.object.transform_apply(rotation=True, scale=True)
     m7p.data.materials.append(mp700_mat)
     # 2) Lower M.2_3: Corsair MP600 CORE XT R2 1TB (OS Drive) seated 100% UNOBSTRUCTED below GPU & cleanly LEFT of 12V-2x6 cable!
-    add_box("SSD_MP600_PCB", (10 * MM, 94 * MM, 23 * MM), (mb_x - 10 * MM, 168 * MM, z0 + 148 * MM), steel_dark, bevel=0.8 * MM)
-    add_box("SSD_MP600_Connector", (13 * MM, 10 * MM, 24 * MM), (mb_x - 11 * MM, 120 * MM, z0 + 148 * MM), rubber_grommet)
-    add_cyl("SSD_MP600_Latch", 3.2 * MM, 8 * MM, (mb_x - 11 * MM, 216 * MM, z0 + 148 * MM), (0, math.pi / 2, 0), fe_trim, 12)
-    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(mb_x - 15.6 * MM, 168 * MM, z0 + 148 * MM))
+    add_box("SSD_MP600_PCB", (12 * MM, 96 * MM, 22 * MM), (mb_x - 11 * MM, 154 * MM, z0 + 150 * MM), steel_dark, bevel=0.8 * MM)
+    add_box("SSD_MP600_Connector", (15 * MM, 10 * MM, 23 * MM), (mb_x - 12 * MM, 104 * MM, z0 + 150 * MM), rubber_grommet)
+    add_cyl("SSD_MP600_Latch", 3.2 * MM, 9 * MM, (mb_x - 12 * MM, 204 * MM, z0 + 150 * MM), (0, math.pi / 2, 0), fe_trim, 12)
+    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(mb_x - 17.6 * MM, 154 * MM, z0 + 150 * MM))
     m6p = bpy.context.active_object
     m6p.name = "SSD_MP600_Label"
-    m6p.scale = (86 * MM, 21 * MM, 1.0)
+    m6p.scale = (88 * MM, 20 * MM, 1.0)
     m6p.rotation_euler = (math.pi / 2, 0, -math.pi / 2)
     bpy.ops.object.transform_apply(rotation=True, scale=True)
     m6p.data.materials.append(mp600_mat)
 
-    # Brushed-silver MSI PRO Z890-P WIFI PCH chipset heatsink cleanly positioned on lower-front of 244mm ATX board
-    add_box("Mobo_ChipsetHS", (22 * MM, 82 * MM, 72 * MM), (mb_x - 13 * MM, 30 * MM, z0 + 186 * MM), steel_matte, bevel=2.8 * MM)
-    add_box("Mobo_ChipsetFace", (2.4 * MM, 74 * MM, 64 * MM), (mb_x - 24.4 * MM, 30 * MM, z0 + 186 * MM), vrm_metal, bevel=1.0 * MM)
-    for cg in range(4):
-        add_box(f"Mobo_ChipGroove_{cg}", (3.2 * MM, 64 * MM, 4.2 * MM), (mb_x - 25.0 * MM, 30 * MM, z0 + 165 * MM + cg * 13.5 * MM), vrm_dark)
+    # Sleek dark-anodized MSI PRO Z890-P WIFI PCH chipset heatsink cleanly positioned below GPU (ZERO bright white box poking under GPU lip!)
+    add_box("Mobo_ChipsetHS", (20 * MM, 74 * MM, 44 * MM), (mb_x - 12 * MM, 26 * MM, z0 + 162 * MM), steel_dark, bevel=2.4 * MM)
+    add_box("Mobo_ChipsetFace", (2.4 * MM, 66 * MM, 36 * MM), (mb_x - 22.4 * MM, 26 * MM, z0 + 162 * MM), vrm_dark, bevel=0.8 * MM)
+    for cg in range(3):
+        add_box(f"Mobo_ChipGroove_{cg}", (3.2 * MM, 54 * MM, 2.6 * MM), (mb_x - 23.0 * MM, 26 * MM, z0 + 151 * MM + cg * 10.5 * MM), fe_trim)
+    # Lower motherboard front-panel USB/Fan/Audio pin headers along bottom PCB edge so lower bay looks authentic & populated!
+    for hi, hy in enumerate([192 * MM, 166 * MM, 102 * MM, 62 * MM, 28 * MM]):
+        add_box(f"Mobo_LowerHeader_{hi}", (12 * MM, 18 * MM, 7.5 * MM), (mb_x - 9 * MM, hy, z0 + 139 * MM), rubber_grommet, bevel=0.5 * MM)
     # 4 corner motherboard mounting standoffs / stainless Philips screws visible on PCB
     for smy, smz in [(204 * MM, z0 + 156 * MM), (20 * MM, z0 + 156 * MM), (-2 * MM, z0 + 258 * MM), (-2 * MM, z0 + 368 * MM)]:
         add_cyl(f"Mobo_MountScrew_{smy:.2f}_{smz:.2f}", 3.0 * MM, 5 * MM, (mb_x - 5.0 * MM, smy, smz), (0, math.pi / 2, 0), fe_trim, 12)
 
-    # Steel-armored PCIe x16 slots + CMOS battery + Gold Nichicon audio caps (leaves M.2_3 at z0+162mm 100% unobstructed!)
-    add_box("Mobo_PCIeSlot1", (14 * MM, 114 * MM, 11 * MM), (mb_x - 9 * MM, 136 * MM, z0 + 234 * MM), fe_trim, bevel=0.8 * MM)
-    add_box("Mobo_PCIeSlot2", (15 * MM, 114 * MM, 10 * MM), (mb_x - 9.5 * MM, 134 * MM, z0 + 190 * MM), fe_trim, bevel=0.8 * MM)
-    add_box("Mobo_PCIeSlot2Inner", (16 * MM, 102 * MM, 4.0 * MM), (mb_x - 10 * MM, 134 * MM, z0 + 190 * MM), rubber_grommet)
-    add_cyl("Mobo_CMOSBat", 9.5 * MM, 6 * MM, (mb_x - 6.5 * MM, 180 * MM, z0 + 196 * MM), (0, math.pi / 2, 0), fe_trim, 18)
+    # Steel-armored PCIe x16 slots + CMOS battery + Gold Nichicon audio caps (leaves M.2_3 at z0+153mm 100% unobstructed!)
+    add_box("Mobo_PCIeSlot1", (14 * MM, 114 * MM, 11 * MM), (mb_x - 9 * MM, 136 * MM, z0 + 236 * MM), fe_trim, bevel=0.8 * MM)
+    add_box("Mobo_PCIeSlot2", (15 * MM, 114 * MM, 10 * MM), (mb_x - 9.5 * MM, 134 * MM, z0 + 186 * MM), fe_trim, bevel=0.8 * MM)
+    add_box("Mobo_PCIeSlot2Inner", (16 * MM, 102 * MM, 4.0 * MM), (mb_x - 10 * MM, 134 * MM, z0 + 186 * MM), rubber_grommet)
+    add_cyl("Mobo_CMOSBat", 9.5 * MM, 6 * MM, (mb_x - 6.5 * MM, 186 * MM, z0 + 186 * MM), (0, math.pi / 2, 0), fe_trim, 18)
     for ak in range(5):
         add_cyl(f"Mobo_AudioCap_{ak}", 3.6 * MM, 10 * MM, (mb_x - 8.5 * MM, 214 * MM, z0 + 158 * MM + ak * 11 * MM), (0, math.pi / 2, 0), cap_gold, 14)
 
@@ -920,12 +939,12 @@ def build_corsair_rtx5090():
     rf.data.materials.append(rad_fin_mat)
     add_box("AIO_RadFrontTank", (126 * MM, 44 * MM, 36 * MM), (4 * MM, -158 * MM, rad_z - 3 * MM), steel_matte, bevel=2.2 * MM)
 
-    # Knurled brushed-chrome compression fittings at BOTH pump block AND clearly visible front radiator end-tank + braided nylon hoses!
+    # Authentic matte-black anodized Corsair rotary swivel fittings at BOTH pump block & radiator end-tank (ZERO bright white/chrome glare rings!)
     for idx, (dz_f, dy_rad) in enumerate([(10 * MM, -148 * MM), (-10 * MM, -166 * MM)]):
-        add_cyl(f"AIO_PumpFit_{idx}", 9.2 * MM, 16 * MM, (mb_x - 42 * MM, pump_y - 36 * MM, pump_z + dz_f), (math.pi / 2, 0, 0), fe_trim, 18)
-        add_cyl(f"AIO_PumpNut_{idx}", 10.4 * MM, 6 * MM, (mb_x - 42 * MM, pump_y - 42 * MM, pump_z + dz_f), (math.pi / 2, 0, 0), vrm_metal, 6)
-        add_cyl(f"AIO_RadFit_{idx}", 9.2 * MM, 20 * MM, (-34 * MM, dy_rad, rad_z - 28 * MM), (0, 0, 0), fe_trim, 18)
-        add_cyl(f"AIO_RadNut_{idx}", 10.8 * MM, 7 * MM, (-34 * MM, dy_rad, rad_z - 35 * MM), (0, 0, 0), vrm_metal, 6)
+        add_cyl(f"AIO_PumpFit_{idx}", 8.8 * MM, 15 * MM, (mb_x - 42 * MM, pump_y - 36 * MM, pump_z + dz_f), (math.pi / 2, 0, 0), vrm_dark, 18)
+        add_cyl(f"AIO_PumpNut_{idx}", 9.6 * MM, 5 * MM, (mb_x - 42 * MM, pump_y - 42 * MM, pump_z + dz_f), (math.pi / 2, 0, 0), steel_dark, 6)
+        add_cyl(f"AIO_RadFit_{idx}", 8.8 * MM, 18 * MM, (-34 * MM, dy_rad, rad_z - 28 * MM), (0, 0, 0), vrm_dark, 18)
+        add_cyl(f"AIO_RadNut_{idx}", 9.8 * MM, 6 * MM, (-34 * MM, dy_rad, rad_z - 35 * MM), (0, 0, 0), steel_dark, 6)
         p0_h = (mb_x - 42 * MM, pump_y - 44 * MM, pump_z + dz_f)
         p1_h = (mb_x - 76 * MM, -10 * MM, pump_z + 18 * MM + dz_f * 0.6)
         p2_h = (-44 * MM, dy_rad + 22 * MM, pump_z + 32 * MM + dz_f * 0.4)
@@ -986,102 +1005,81 @@ def build_corsair_rtx5090():
         add_cyl(f"{name}_HubCap", 14 * MM, 21.5 * MM, loc, rot_ring, fe_trim, 24)
         add_curved_fan_blades(f"{name}_Blades", loc, axis, fan_blade_mat, count=7)
 
-    # Position 3 front RX120 RGB intake fans right behind the triangular front airflow mesh so all 3 glow clearly from front & side!
-    for fi, fz in enumerate([138 * MM, 256 * MM, 374 * MM]):
-        add_square_120mm_fan(f"Fan_Front_{fi}", (0, -D * 0.5 + 32 * MM, z0 + fz), "Y", rgb_cyan if fi % 2 == 0 else rgb_mint)
+    # Position 3 front RX120 RGB intake fans cleanly recessed on the 5000D fan mount rail behind the stamped steel airflow mesh (ZERO clipping!)
+    for fi, fz in enumerate([138 * MM, 260 * MM, 382 * MM]):
+        add_square_120mm_fan(f"Fan_Front_{fi}", (0, -D * 0.5 + 40 * MM, z0 + fz), "Y", rgb_cyan if fi % 2 == 0 else rgb_mint)
     for fi, fy in enumerate([-88 * MM, 32 * MM, 152 * MM]):
         add_square_120mm_fan(f"Fan_Top_{fi}", (4 * MM, fy, z0 + H - 74 * MM), "Z", rgb_mint if fi % 2 == 0 else rgb_cyan)
     add_square_120mm_fan("Fan_Rear", (0, D * 0.5 - 32 * MM, z0 + 372 * MM), "Y", rgb_cyan)
 
-    # 7. Flagship NVIDIA GeForce RTX 5090 Founders Edition (304 x 137 x 28 mm — razor-sleek TRUE 2-slot double flow-through!):
-    #    - Overhangs the 244mm ATX motherboard front edge by ~46mm (true-to-life 304mm vs 244mm proportion!)
-    #    - Deeply recessed 45° side 12V-2x6 pocket with 12 individually-sleeved black paracord wires & 3 machined combs!
+    # 7. Flagship CAD-Accurate NVIDIA GeForce RTX 5090 Founders Edition (304 x 137 x 38 mm true 2.0-slot Double Flow-Through!):
+    #    - Bolted flush to the Corsair 5000D rear expansion rail (slots 5 & 6 at true PCIe_1 height!) exposing MP600 CORE XT R2 cleanly below!
     gpu_cx = mb_x - GPU_W * 0.5 - 6 * MM
-    gpu_cy = D * 0.5 - 12 * MM - GPU_L * 0.5
-    gpu_cz = z0 + 234 * MM
+    gpu_cy = D * 0.5 - 16 * MM - GPU_L * 0.5
+    gpu_cz = z0 + 236 * MM
+    fe_anchors = build_rtx5090_fe_at((gpu_cx, gpu_cy, gpu_cz), TEX_DIR, rear_rail_y=D * 0.5 - 15.5 * MM, screw_rail_x=-68 * MM)
 
-    # Brushed-steel TRUE 2-slot PCIe rear mounting bracket (strictly 2 slots = 31mm tall!)
-    add_box("RTX5090_IOBracket", (GPU_W + 20 * MM, 18 * MM, GPU_H + 3 * MM), (gpu_cx + 4 * MM, D * 0.5 - 17 * MM, gpu_cz), fe_trim, bevel=0.8 * MM)
-    for sz in (-8 * MM, 8 * MM):
-        add_cyl(f"RTX5090_BracketScrew_{sz:.2f}", 3.0 * MM, 6 * MM, (gpu_cx - GPU_W * 0.5 + 10 * MM, D * 0.5 - 24 * MM, gpu_cz + sz), (math.pi / 2, 0, 0), fe_trim, 14)
+    # Silky-smooth substantial Corsair 600W PCIe 5.1 12V-2x6 braided cable exiting cleanly at 45° from recessed pocket into PSU grommet!
+    # Built with exact orthonormal parallel-transport frame so all 6 braided cores & 2 CNC cable combs stay 100% flush with ZERO twist or tilt!
+    # Graceful natural S-curve with organic gravity drape exiting 45° from recessed pocket and plunging smoothly vertically into PSU grommet!
+    p0_16 = fe_anchors["plug_exit"]
+    p1_16 = (p0_16[0] - 26 * MM, p0_16[1] - 40 * MM, p0_16[2] - 2 * MM)
+    p2_16 = (grom_x - 10 * MM, grom_y + 4 * MM, shroud_top_z + 58 * MM)
+    p3_16 = (grom_x, grom_y, shroud_top_z - 4 * MM)
 
-    # Center sculpted hourglass PCB core + beveled die-cast satin-titanium Double-V / X-frame + ultra-fine recessed inner-V light guides!
-    rail_w = 11 * MM
-    add_box("RTX5090_RailGlass", (rail_w, GPU_L - 14 * MM, GPU_H), (gpu_cx - GPU_W * 0.5 + rail_w * 0.5, gpu_cy, gpu_cz), titanium, bevel=4.4 * MM, segments=5, smooth=True)
-    add_box("RTX5090_RailMobo", (rail_w, GPU_L - 14 * MM, GPU_H), (gpu_cx + GPU_W * 0.5 - rail_w * 0.5, gpu_cy, gpu_cz), titanium, bevel=4.4 * MM, segments=5, smooth=True)
-    add_box("RTX5090_EndFront", (GPU_W, 24 * MM, GPU_H), (gpu_cx, gpu_cy - GPU_L * 0.5 + 12 * MM, gpu_cz), titanium, bevel=8.5 * MM, segments=6, smooth=True)
-    add_box("RTX5090_EndRear", (GPU_W, 24 * MM, GPU_H), (gpu_cx, gpu_cy + GPU_L * 0.5 - 12 * MM, gpu_cz), titanium, bevel=8.5 * MM, segments=6, smooth=True)
-    add_box("RTX5090_CenterCore", (GPU_W - rail_w * 1.4, 84 * MM, GPU_H - 1.0 * MM), (gpu_cx, gpu_cy, gpu_cz), titanium, bevel=2.4 * MM, segments=3, smooth=True)
+    n_seg_16 = 64
+    spine_pts = [Vector(eval_cubic_bezier(p0_16, p1_16, p2_16, p3_16, i / n_seg_16)) for i in range(n_seg_16 + 1)]
+    spine_frames = []
+    for i in range(n_seg_16 + 1):
+        t_v = eval_cubic_bezier_tangent(p0_16, p1_16, p2_16, p3_16, i / n_seg_16)
+        # Keep cable ribbon flat plane cleanly facing glass side (-X) while curving smoothly around bend
+        ref_side = Vector((-1.0, 0.0, 0.0))
+        b_v = t_v.cross(ref_side)
+        if b_v.length < 1e-4:
+            b_v = Vector((0.0, 1.0, 0.0))
+        b_v.normalize()
+        n_v = b_v.cross(t_v).normalized()
+        spine_frames.append((t_v, n_v, b_v))
 
-    x_z = gpu_cz + GPU_H * 0.5 - 0.5 * MM
-    for sy in (-1, 1):
-        for sx in (-1, 1):
-            ang = sx * sy * math.radians(36)
-            add_box(f"RTX5090_XArm_{sx}_{sy}", (42 * MM, 11.0 * MM, 2.6 * MM), (gpu_cx + sx * 42 * MM, gpu_cy + sy * 48 * MM, x_z), fe_xframe, bevel=1.1 * MM, segments=3, rot=(0, 0, ang), smooth=True)
-            add_box(f"RTX5090_XVLed_{sx}_{sy}", (34 * MM, 1.1 * MM, 1.0 * MM), (gpu_cx + sx * 40 * MM, gpu_cy + sy * 43 * MM, x_z + 1.1 * MM), fe_white_led, bevel=0.2 * MM, rot=(0, 0, ang))
+    # 2x3 densely nested individually-sleeved braided Corsair Type-4 12V-2x6 cores (substantial 15mm x 8.5mm bundle, ZERO kinks!)
+    for row_i, off_n in enumerate([-2.0 * MM, 2.0 * MM]):
+        for col_i, off_b in enumerate([-4.2 * MM, 0.0, 4.2 * MM]):
+            cd = bpy.data.curves.new(f"RTX5090_12V2x6_Core_{row_i}_{col_i}", type="CURVE")
+            cd.dimensions = "3D"
+            cd.resolution_u = 2
+            cd.bevel_depth = 2.15 * MM
+            cd.bevel_resolution = 10
+            sp = cd.splines.new("POLY")
+            sp.points.add(len(spine_pts) - 1)
+            for i, (pt, (_, nv, bv)) in enumerate(zip(spine_pts, spine_frames)):
+                # Taper gently into the recessed 45° plug socket at i=0
+                taper = 0.72 + 0.28 * min(1.0, i / 8.0)
+                q = pt + nv * (off_n * taper) + bv * (off_b * taper)
+                sp.points[i].co = (q.x, q.y, q.z, 1.0)
+            cobj = bpy.data.objects.new(f"RTX5090_12V2x6_Core_{row_i}_{col_i}", cd)
+            bpy.context.scene.collection.objects.link(cobj)
+            cobj.data.materials.append(hose_mat if (row_i + col_i) % 2 == 0 else braid_mat)
+            bpy.ops.object.select_all(action="DESELECT")
+            cobj.select_set(True)
+            bpy.context.view_layer.objects.active = cobj
+            bpy.ops.object.convert(target="MESH")
+            for poly in bpy.context.active_object.data.polygons:
+                poly.use_smooth = True
 
-    # Seamless center dark-gunmetal RTX 5090 top plate
-    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(gpu_cx, gpu_cy, gpu_cz + GPU_H * 0.5 + 0.15 * MM))
-    g_top = bpy.context.active_object
-    g_top.name = "RTX5090_TopBackplate"
-    g_top.scale = (64 * MM, 54 * MM, 1.0)
-    g_top.rotation_euler = (0, 0, -math.pi / 2)
-    bpy.ops.object.transform_apply(rotation=True, scale=True)
-    g_top.data.materials.append(gpu_top_mat)
-
-    # TRUE OPEN SEE-THROUGH DOUBLE FLOW-THROUGH HEATSINK FIN ARRAYS:
-    # Deep 24mm vertically stacked anodized fins with crisp shadow channels & subtle beveled fin tops (authentic 3D depth!)
-    for end_y in (-88 * MM, 88 * MM):
-        for k in range(14):
-            fy_fin = gpu_cy + end_y - 39.0 * MM + k * 6.00 * MM
-            add_box(f"RTX5090_Fin_{end_y:.2f}_{k}", (GPU_W - rail_w * 2.0, 1.65 * MM, 23.5 * MM), (gpu_cx, fy_fin, gpu_cz - 0.8 * MM), fe_fin_blade)
-
-    for fi, f_off in enumerate([-88 * MM, 88 * MM]):
-        add_torus(f"RTX5090_FanRing_{fi}", 48 * MM, 2.2 * MM, (gpu_cx, gpu_cy + f_off, gpu_cz - GPU_H * 0.5 + 2.5 * MM), (0, 0, 0), steel_dark)
-        add_cyl(f"RTX5090_FanHub_{fi}", 15 * MM, 4.0 * MM, (gpu_cx, gpu_cy + f_off, gpu_cz - GPU_H * 0.5 + 2.5 * MM), (0, 0, 0), titanium, 20)
-
-    # Crisp 2048px backlit GEFORCE RTX 5090 side badge (strictly left of the 45° 12V-2x6 pocket — 100% UNOBSTRUCTED!)
-    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(gpu_cx - GPU_W * 0.5 - 0.25 * MM, gpu_cy, gpu_cz))
-    g_side = bpy.context.active_object
-    g_side.name = "RTX5090_SideNameplate"
-    g_side.scale = (GPU_L - 32 * MM, GPU_H - 8 * MM, 1.0)
-    g_side.rotation_euler = (math.pi / 2, 0, -math.pi / 2)
-    bpy.ops.object.transform_apply(rotation=True, scale=True)
-    g_side.data.materials.append(gpu_side_mat)
-
-    # Flush Deeply Recessed 45°-Angled Side 16-Pin 12V-2x6 Connector Cavity INSIDE the RTX 5090 FE Side Frame (ZERO protruding blocky nub!)
-    plug_y = gpu_cy - 58 * MM
-    add_box("RTX5090_12V2x6_RecessPocket", (11 * MM, 24 * MM, 14 * MM), (gpu_cx - GPU_W * 0.5 + 5.0 * MM, plug_y, gpu_cz), fe_fin, bevel=0.8 * MM, rot=(0, 0, math.radians(-45)))
-    add_box("RTX5090_12V2x6_PlugBody", (12 * MM, 16 * MM, 9.8 * MM), (gpu_cx - GPU_W * 0.5 + 2.0 * MM, plug_y - 1.5 * MM, gpu_cz), rubber_grommet, bevel=1.2 * MM, rot=(0, 0, math.radians(-45)))
-
-    # Smooth plush individually-sleeved Corsair 600W PCIe 5.1 12V-2x6 black cable sweeping naturally forward & cleanly down into PSU grommet (100% CLEAR of MP600!)
-    p0_16 = (gpu_cx - GPU_W * 0.5 - 1.5 * MM, plug_y - 4.0 * MM, gpu_cz - 1.0 * MM)
-    p1_16 = (gpu_cx - GPU_W * 0.5 - 18 * MM, plug_y - 36 * MM, gpu_cz - 16 * MM)
-    p2_16 = (grom_x - 14 * MM, grom_y + 6 * MM, shroud_top_z + 58 * MM)
-    p3_16 = (grom_x, grom_y, shroud_top_z - 3 * MM)
-
-    # Dense plush 2x4 = 8 thick smooth braided conductors (zero thin-wire aliasing or jagged silhouette!)
-    for row_i, ox in enumerate([-2.1 * MM, 2.1 * MM]):
-        for col_i in range(4):
-            oy = (-1.5 + col_i) * 4.0 * MM
-            add_bezier_tube(
-                f"RTX5090_12V2x6_Wire_{row_i}_{col_i}",
-                (p0_16[0] + ox * 0.55, p0_16[1] + oy * 0.68, p0_16[2]),
-                (p1_16[0] + ox, p1_16[1] + oy, p1_16[2]),
-                (p2_16[0] + ox, p2_16[1] + oy, p2_16[2]),
-                (p3_16[0] + ox * 0.75, p3_16[1] + oy * 0.72, p3_16[2]),
-                2.15 * MM,
-                braid_accent if col_i in (1, 2) else braid_mat,
-                steps=64,
-            )
-    # Two sleek flush matte-black cable combs aligned smoothly along the curved centerline
+    # Two sleek flush matte-black CNC cable combs aligned using the EXACT orthonormal spine frame (n_v, b_v, t_v)!
     for ci, t_comb in enumerate([0.34, 0.70]):
-        cpos = eval_cubic_bezier(p0_16, p1_16, p2_16, p3_16, t_comb)
-        ctan = eval_cubic_bezier_tangent(p0_16, p1_16, p2_16, p3_16, t_comb)
-        rot_q = Vector((0, 0, -1)).rotation_difference(ctan).to_euler()
-        add_box(f"RTX5090_12V2x6_Comb_{ci}", (8.8 * MM, 18.8 * MM, 4.6 * MM), cpos, rubber_grommet, bevel=0.8 * MM, rot=(rot_q.x, rot_q.y, rot_q.z))
+        idx_c = int(round(t_comb * n_seg_16))
+        cpos = spine_pts[idx_c]
+        t_v, n_v, b_v = spine_frames[idx_c]
+        rot_m = Matrix((
+            (n_v.x, b_v.x, t_v.x),
+            (n_v.y, b_v.y, t_v.y),
+            (n_v.z, b_v.z, t_v.z),
+        ))
+        rot_e = rot_m.to_euler()
+        add_box(f"RTX5090_12V2x6_Comb_{ci}", (9.4 * MM, 14.2 * MM, 4.6 * MM), (cpos.x, cpos.y, cpos.z), rubber_grommet, bevel=0.8 * MM, rot=(rot_e.x, rot_e.y, rot_e.z))
 
-    # 8. Single-sheet Flush Smoked Tempered Glass Side Panel + Subtle Dark Smoked-Glass Perimeter Rim
+    # 8. Single-sheet Flush Smoked Tempered Glass Side Panel + Crisp 4mm Chamfered Smoked-Glass Perimeter Edges!
     bpy.ops.mesh.primitive_plane_add(size=1.0, location=(-W * 0.5 + 1.2 * MM, 0, z0 + H * 0.5))
     glass_p = bpy.context.active_object
     glass_p.name = "Case_TemperedGlass"
@@ -1089,8 +1087,11 @@ def build_corsair_rtx5090():
     glass_p.rotation_euler = (math.pi / 2, 0, math.pi / 2)
     bpy.ops.object.transform_apply(rotation=True, scale=True)
     glass_p.data.materials.append(glass_mat)
-    # Subtle dark smoked-glass chamfered thickness trim (dark slate-charcoal, NOT bright green!)
-    add_box("Case_GlassThicknessRim", (2.2 * MM, 2.2 * MM, H - 26 * MM), (-W * 0.5 + 0.8 * MM, -D * 0.5 + 11 * MM, z0 + H * 0.5), glass_rim_mat, bevel=0.4 * MM)
+    # 4mm physical chamfered smoked-glass perimeter edges catching subtle specular edge highlights
+    add_box("Case_GlassEdgeFront", (3.8 * MM, 2.4 * MM, H - 20 * MM), (-W * 0.5 + 0.6 * MM, -D * 0.5 + 9.8 * MM, z0 + H * 0.5), glass_rim_mat, bevel=0.6 * MM)
+    add_box("Case_GlassEdgeRear", (3.8 * MM, 2.4 * MM, H - 20 * MM), (-W * 0.5 + 0.6 * MM, D * 0.5 - 9.8 * MM, z0 + H * 0.5), glass_rim_mat, bevel=0.6 * MM)
+    add_box("Case_GlassEdgeTop", (3.8 * MM, D - 20 * MM, 2.4 * MM), (-W * 0.5 + 0.6 * MM, 0, z0 + H - 9.8 * MM), glass_rim_mat, bevel=0.6 * MM)
+    add_box("Case_GlassEdgeBot", (3.8 * MM, D - 20 * MM, 2.4 * MM), (-W * 0.5 + 0.6 * MM, 0, z0 + 9.8 * MM), glass_rim_mat, bevel=0.6 * MM)
 
     out_blend = os.path.join(OUT_DIR, "corsair_rtx5090.blend")
     bpy.ops.wm.save_as_mainfile(filepath=out_blend)

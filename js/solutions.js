@@ -104,6 +104,7 @@ export class SolutionsController {
     // Screen buffer mirrored to the 3D Omarchy monitor
     this.screenLines = [];
     this.screenVim = null;
+    this.screenLastVim = null;
     this.screenHeader = 'Loading OverTheWire…';
     this.screenGoal = '';
     this.screenHost = 'omarchy@workstation';
@@ -723,6 +724,7 @@ export class SolutionsController {
       goal: this.screenGoal,
       lines: this.screenLines,
       vim: this.screenVim,
+      lastVim: this.screenLastVim,
       activeNarrSeg: this.activeNarrSeg,
       narrating: this.narrOn && !this.narrAudio.paused && !this.narrAudio.ended,
       narrCaption: activeText,
@@ -952,6 +954,15 @@ export class SolutionsController {
         status: statusTxt,
         mode: modeEl.textContent,
       };
+      // Also preserve full buffer snapshot so the 3D Omarchy monitor keeps showing the complete Neovim source pane after :wq!
+      const allNums = Object.keys(buf).map(Number).sort((a, b) => a - b);
+      this.screenLastVim = {
+        file,
+        lines: allNums.map((num) => ({ num, text: buf[num] })),
+        activeLine: curLine,
+        editing: true,
+        mode: modeEl.textContent || 'NORMAL',
+      };
       this._emitScreen();
     };
 
@@ -1040,6 +1051,9 @@ export class SolutionsController {
     }
 
     this.screenVim = null;
+    if (this.screenLastVim) {
+      this.screenLastVim = { ...this.screenLastVim, editing: false, mode: 'NORMAL' };
+    }
     this._emitScreen();
 
     for (const st of run) {
@@ -1093,6 +1107,29 @@ export class SolutionsController {
     this.screenHost = `${L.user || this.gameKey}@${G.host || 'overthewire.org'}`;
     this.screenLines = [];
     this.screenVim = null;
+    this.screenLastVim = null;
+    // Pre-populate final source file preview if this level edits a file in vim, so the 3D Omarchy split pane starts rich & full!
+    if (L.steps) {
+      const firstVimStep = L.steps.find((s) => this._vimFileOf(s));
+      if (firstVimStep) {
+        const vf = this._vimFileOf(firstVimStep);
+        const vimRun = L.steps.filter((s) => this._vimFileOf(s) === vf);
+        const merged = {};
+        for (const s of vimRun) {
+          Object.assign(merged, this._parseVimScreen(s.out));
+        }
+        const nums = Object.keys(merged).map(Number).sort((a, b) => a - b);
+        if (nums.length) {
+          this.screenLastVim = {
+            file: vf,
+            lines: nums.map((num) => ({ num, text: merged[num] })),
+            activeLine: nums[0],
+            editing: false,
+            mode: 'NORMAL',
+          };
+        }
+      }
+    }
 
     this.dom.hudNowPlaying.textContent = titleStr;
     this.dom.termTitle.textContent = `omarchy :: ghostty — ${cleanTitle} L${L.lvl}`;
