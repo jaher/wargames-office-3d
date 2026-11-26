@@ -14,7 +14,7 @@ case "$SUBJECT" in
 1. Overall atmosphere, warm photographic lighting, shadows, materials, and visual cohesion vs felixrieseberg.com (does it look rich, warm, and cinematic or flat/CG/cartoonish?).
 2. Outside window view: MUST be extremely realistic — photographic skyline depth, fine-scale realistic architectural office windows (NOT giant blocky LEGO squares!), distant atmospheric haze, bridges/water/landmarks, sky/sun/clouds, window framing & curtains (no geometry clipping!).
 3. Desktop monitor readability: is the Omarchy Linux desktop & terminal text clearly visible and legible with zero glare blowout?
-4. Desk layout & peripherals: NO speakers should be anywhere in the office (flag any speaker as a defect!). The 8x NVIDIA DGX Spark stack and MikroTik CRS804 switch MUST sit on the desk alongside the monitor. Check realistic shapes, proportions, materials, and zero clipping for keyboard (Keychron Q1 Pro), mouse (Logitech MX Master 3S), Anglepoise lamp, books, mug, Herman Miller Aeron chair (mesh visible!), walnut desk, rug, floor, walls, plants.
+4. Desk layout & peripherals: NO speakers should be anywhere in the office (flag any speaker as a defect!). The 8-node GB10 desktop stack (6x champagne-gold NVIDIA DGX Spark with front NVIDIA logos + 2x Stellar Grey ASUS Ascent GX10 at the base) and MikroTik CRS804 switch MUST sit on the desk alongside the monitor. Check realistic shapes, proportions, materials, and zero clipping for Corsair black aluminum keyboard (volume roller) & Corsair wireless mouse, Meta Ray-Ban Display glasses & Meta Neural Band on the desk, Tripp Lite ISOBAR8ULTRA surge suppressor on the floor under the desk with power cables running into it, Anglepoise lamp, books, mug, Herman Miller Aeron chair (mesh visible!), walnut desk, rug, floor, walls, plants.
 5. Corsair 5000D Airflow PC tower visibility & RTX 5090 legibility on the right side of the desk.
 6. Any clipping, floating parts, black viewport margins, UI bugs, or visual artifacts."
     ;;
@@ -27,17 +27,19 @@ case "$SUBJECT" in
 5. Physical Dell UltraSharp 34\" monitor bezel, chin, aluminum stand, and zero glare blowout."
     ;;
   pc)
-    CRITERIA="Judge this close-up screenshot/render of the Corsair 5000D Airflow PC tower and NVIDIA GeForce RTX 5090 Founders Edition against the real products. Check:
-1. Corsair 5000D Airflow accuracy: proportions (245x520x520mm), matte black steel chassis, triangular-perforated front/top airflow mesh, Corsair sails branding, PSU shroud, top I/O, crystal-clear tempered glass side panel, internal AIO LCD cooler, DDR5 sticks, RGB fans.
-2. NVIDIA GeForce RTX 5090 Founders Edition accuracy: true sleek 2-slot proportions (304x137x40mm), dark gunmetal/titanium rounded metal shroud, iconic double-V diagonal frame backplate, double flow-through fin cutouts, crisp unobstructed 'GEFORCE RTX 5090' branding, 16-pin braided cable.
-3. Material realism, lighting, reflections, and zero clipping/z-fighting."
+    CRITERIA="Judge this close-up screenshot/render of the ORIGIN PC Millennium Prime (Corsair 5000D Airflow black, top I/O) build against every exact real-world component:
+1. Case & Exterior: Corsair 5000D Airflow black (245x520x520mm), matte black steel chassis, triangular-perforated front/top airflow mesh, Corsair sails branding, top I/O with yellow USB ports, tinted tempered glass side panel, PSU shroud cutout window visibly showing the Corsair HX1500i Platinum PSU side label.
+2. Internals: MSI PRO Z890-P WIFI ATX motherboard (black PCB + silver slotted VRM/Rear I/O/chipset heatsinks), EXACTLY TWO (2) Corsair VENGEANCE 96GB (2x48GB) non-RGB low-profile matte-black DDR5 RAM sticks in slots A2 & B2, Corsair iCUE LINK TITAN 360 RX RGB AIO (geometric CapSwap pump dome with RGB ring + 360mm radiator + braided hoses) + 7x Corsair iCUE LINK RX120 RGB fans, BOTH M.2 NVMe drives visible (Corsair MP700 PRO 4TB Gen5 heatsink above GPU + Corsair MP600 CORE XT R2 1TB below GPU), Corsair Type-4 Gen 4 black individually-sleeved cables + Corsair 600W 12V-2x6 GPU cable.
+3. GPU: NVIDIA GeForce RTX 5090 Founders Edition 32GB (true sleek 2-slot 304x137x40mm dark gunmetal/titanium unibody, double-V backplate with open dual flow-through fins, crisp unobstructed 'GEFORCE RTX 5090' side branding, recessed 45-degree angled 12V-2x6 connector).
+4. Material realism, lighting, tempered glass reflections, and zero clipping/z-fighting."
     ;;
   cluster)
-    CRITERIA="Judge this close-up live Three.js screenshot of the 8x NVIDIA DGX Spark stack + MikroTik CRS804-4DDQ-hRM switch sitting ON THE WALNUT DESK alongside the monitor against the real hardware products. Check:
-1. NVIDIA DGX Spark (8 stacked units): exact compact proportions (150x150x50.5mm), champagne-gold anodized aluminum chassis, iconic porous gold metal-foam front & rear fascia, subtle NVIDIA / DGX Spark branding, rear ports (power button, 4x USB-C, HDMI 2.1a, 10GbE RJ45, 2x ConnectX-7 QSFP).
-2. MikroTik CRS804-4DDQ-hRM switch: exact half-width 1U proportions (218x387x44mm), industrial silver-steel chassis with dark anodized faceplate, front panel layout (recessed reset, PWR/USR/FAULT LEDs, RJ45 console, 2x 10GbE RJ45, 4x 400G QSFP56-DD stainless cages with transceivers/pull-tabs), crisp MikroTik CRS804-4DDQ-hRM silkscreen (unobstructed by pull-tabs), symmetrical rack ears.
-3. Cabling: clean realistic 400G-to-2x200GbE breakout DAC cables connecting the 4 right-side QSFP-DD ports of the CRS804 to the 8 DGX Spark nodes without awkward clipping or spaghetti mess.
-4. Placement on walnut desk next to monitor/PC (zero overlapping/clipping with neighbors, no speakers), lighting, contact shadows, and overall photorealism."
+    CRITERIA="Judge this close-up live Three.js screenshot of the 8-node GB10 stack (6x NVIDIA DGX Spark + 2x ASUS Ascent GX10) + MikroTik CRS804-4DDQ-hRM switch sitting ON THE WALNUT DESK alongside the monitor against the real hardware products. Check:
+1. 6x NVIDIA DGX Spark (top 6 units): exact compact proportions (150x150x50.5mm), champagne-gold anodized aluminum chassis, iconic porous gold metal-foam front & rear fascia, crisp centered front NVIDIA eye-claw + NVIDIA logo badge on each unit, and laser-etched top branding.
+2. 2x ASUS Ascent GX10 (bottom 2 units): exact compact proportions (150x150x51mm), sleek Stellar Grey brushed/anodized aluminum unibody, tightly spaced vertical front cooling louver vents, minimalist ASUS / GX10 front branding, and discreet flush square power button with illuminated status LED.
+3. MikroTik CRS804-4DDQ-hRM switch: exact half-width 1U proportions (218x387x44mm), industrial silver-steel chassis with dark anodized faceplate, front panel layout (recessed reset, PWR/USR/FAULT LEDs, RJ45 console, 2x 10GbE RJ45, 4x 400G QSFP56-DD stainless cages with transceivers/pull-tabs), crisp MikroTik CRS804-4DDQ-hRM silkscreen (unobstructed by pull-tabs), symmetrical rack ears.
+4. Cabling: clean realistic 400G-to-2x200GbE breakout DAC cables connecting the 4 right-side QSFP-DD ports of the CRS804 to the 8 nodes without awkward clipping or spaghetti mess.
+5. Placement on walnut desk next to monitor/PC (zero overlapping/clipping with neighbors, no speakers), lighting, contact shadows, and overall photorealism."
     ;;
   window)
     CRITERIA="Judge this Skyline View screenshot against the outside environment quality of felixrieseberg.com (reference image provided). Check:

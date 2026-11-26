@@ -21,8 +21,8 @@ export class OmarchyScreen {
     this.texture.magFilter = THREE.LinearFilter;
 
     this.state = {
-      header: 'BANDIT — LEVEL 0',
-      host: 'bandit0@bandit.labs.overthewire.org',
+      header: 'VORTEX — LEVEL 0',
+      host: 'vortex0@vortex.labs.overthewire.org',
       goal: 'Loading OverTheWire solutions…',
       lines: [{ kind: 'note', text: 'Booting Omarchy Linux (Hyprland / Wayland)…' }],
       vim: null,
@@ -61,17 +61,33 @@ export class OmarchyScreen {
         out.push(para);
         continue;
       }
+      // Word-boundary wrapping first (never split ordinary words mid-word!), character fallback only for single long tokens
+      const words = para.split(/(\s+)/);
       let cur = '';
-      for (let i = 0; i < para.length; i++) {
-        const ch = para[i];
-        if (ctx.measureText(cur + ch).width > maxWidth && cur.length > 0) {
-          out.push(cur);
-          cur = ch;
+      for (const tok of words) {
+        if (!tok) continue;
+        if (ctx.measureText(cur + tok).width <= maxWidth) {
+          cur += tok;
+        } else if (cur.trim().length > 0 && tok.trim().length === 0) {
+          out.push(cur.trimEnd());
+          cur = '';
+        } else if (cur.trim().length > 0 && ctx.measureText(tok.trimStart()).width <= maxWidth) {
+          out.push(cur.trimEnd());
+          cur = tok.trimStart();
         } else {
-          cur += ch;
+          // Single unbroken token wider than maxWidth (e.g., long hash/path): wrap cleanly by char
+          for (let i = 0; i < tok.length; i++) {
+            const ch = tok[i];
+            if (ctx.measureText(cur + ch).width > maxWidth && cur.length > 0) {
+              out.push(cur);
+              cur = ch;
+            } else {
+              cur += ch;
+            }
+          }
         }
       }
-      if (cur) out.push(cur);
+      if (cur.trimEnd()) out.push(cur.trimEnd());
     }
     return out;
   }
@@ -145,29 +161,29 @@ export class OmarchyScreen {
       red: '#f7768e',
     };
 
-    // 1. Recognizable Tokyo Night Mountain & Twilight Horizon Wallpaper (clearly visible in Hyprland gaps!)
+    // 1. Recognizable Tokyo Night Mountain & Twilight Horizon Wallpaper (vividly visible in Hyprland gaps & translucent tiles!)
     const wp = ctx.createLinearGradient(0, 0, 0, H);
-    wp.addColorStop(0.0, '#0f1224');
-    wp.addColorStop(0.32, '#1d244b');
-    wp.addColorStop(0.62, '#3d3069');
-    wp.addColorStop(0.84, '#6d447b');
-    wp.addColorStop(1.0, '#171929');
+    wp.addColorStop(0.0, '#141936');
+    wp.addColorStop(0.30, '#2a346b');
+    wp.addColorStop(0.60, '#5a3d8c');
+    wp.addColorStop(0.84, '#9e5394');
+    wp.addColorStop(1.0, '#1d2038');
     ctx.fillStyle = wp;
     ctx.fillRect(0, 0, W, H);
 
     // Subtle crisp starlight dots in upper Tokyo Night sky visible around top gaps
-    ctx.fillStyle = 'rgba(220, 232, 255, 0.55)';
-    for (let i = 0; i < 60; i++) {
+    ctx.fillStyle = 'rgba(226, 236, 255, 0.72)';
+    for (let i = 0; i < 85; i++) {
       const sx = ((i * 397) % W);
-      const sy = 50 + ((i * 193) % (H * 0.45));
-      ctx.fillRect(sx, sy, 2, 2);
+      const sy = 48 + ((i * 193) % (H * 0.48));
+      ctx.fillRect(sx, sy, 2.5, 2.5);
     }
 
-    // Glowing Tokyo Night sunset/neon moon aurora behind mountain ridge
-    const moon = ctx.createRadialGradient(W * 0.66, H * 0.44, 18, W * 0.66, H * 0.44, 680);
-    moon.addColorStop(0, 'rgba(247, 118, 142, 0.52)');
-    moon.addColorStop(0.26, 'rgba(187, 154, 247, 0.42)');
-    moon.addColorStop(0.55, 'rgba(122, 162, 247, 0.24)');
+    // Glowing Tokyo Night neon twilight moon aurora behind mountain ridge
+    const moon = ctx.createRadialGradient(W * 0.62, H * 0.42, 24, W * 0.62, H * 0.42, 760);
+    moon.addColorStop(0, 'rgba(255, 138, 166, 0.74)');
+    moon.addColorStop(0.28, 'rgba(196, 162, 255, 0.56)');
+    moon.addColorStop(0.58, 'rgba(122, 162, 247, 0.34)');
     moon.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = moon;
     ctx.fillRect(0, 0, W, H);
@@ -409,7 +425,8 @@ export class OmarchyScreen {
       }
 
       if (!slice.some((r) => r.typing)) {
-        const promptStr = `${(this.state.host || 'bandit0@bandit').split('.')[0]}:~$ `;
+        const lastCmd = [...(this.state.lines || [])].reverse().find((l) => l.kind === 'cmd' && l.prompt);
+        const promptStr = lastCmd ? lastCmd.prompt : `${(this.state.host || 'vortex0@omarchy').split('.')[0]}:~$ `;
         const py = Math.min(y + 4, innerY + innerH - 10);
         ctx.fillStyle = TN.cyan;
         ctx.fillText(promptStr, innerX, py);
@@ -470,9 +487,9 @@ export class OmarchyScreen {
     ctx.fillText('Kernel: 6.14.2-arch1-1', rightX + 195, topY + 178);
 
     const specs = [
-      ['WM', 'Hyprland (Wayland)'],
+      ['CPU', 'Intel Core Ultra 9 285K · 96GB'],
       ['GPU', 'NVIDIA GeForce RTX 5090 FE 32GB'],
-      ['NODES', '8× NVIDIA DGX Spark (1.6 TB)'],
+      ['NODES', '6× DGX Spark + 2× Ascent GX10'],
       ['FABRIC', 'MikroTik CRS804 400G QSFP56-DD'],
     ];
     let sy = topY + 234;
@@ -495,7 +512,7 @@ export class OmarchyScreen {
 
     // Tile 2: Authentic Dense `btop++` System, Cluster, Network & Process TUI + Compact Mission Footer
     ctx.save();
-    ctx.fillStyle = 'rgba(22, 22, 30, 0.90)';
+    ctx.fillStyle = 'rgba(20, 22, 34, 0.82)';
     ctx.beginPath();
     ctx.roundRect(rightX, botTileY, rightW, botTileH, 10);
     ctx.fill();
@@ -544,7 +561,7 @@ export class OmarchyScreen {
     ctx.fillText('MEM · VRAM · 8× DGX SPARK · CRS804', bx + 16, memY + 4);
 
     const meters = [
-      ['RAM   18.4 / 128 GiB', 0.24, TN.green],
+      ['RAM   18.4 /  96 GiB', 0.24, TN.green],
       ['VRAM  11.2 /  32 GiB', 0.36, TN.cyan],
       ['DGX   8/8 ONLINE 200G', 0.88, TN.amber],
     ];
@@ -576,7 +593,7 @@ export class OmarchyScreen {
       ['PID    COMMAND               MEM     CPU%', TN.comment],
       ['1042   hyprland --wayland    412M    2.1%', TN.fgBright],
       ['1188   ghostty -e tmux       196M    0.8%', TN.cyan],
-      ['2401   ssh bandit0@otw        24M    0.2%', TN.green],
+      ['2401   ssh vortex0@otw        24M    0.2%', TN.green],
       ['3110   dgx-spark-mesh-rdma  4.8G    9.4%', TN.amber],
     ];
     procs.forEach(([txt, col], idx) => {

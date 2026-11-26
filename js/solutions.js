@@ -95,7 +95,7 @@ export class SolutionsController {
     this.onScreenUpdate = onScreenUpdate;
 
     this.games = {};
-    this.gameKey = 'bandit';
+    this.gameKey = 'vortex';
     this.cur = 0;
     this.playing = true;
     this.runId = 0;
@@ -365,12 +365,11 @@ export class SolutionsController {
       }
     }
 
-    if (!this.games[this.gameKey]) {
+    if (this.games.vortex && !this.userPickedGame) {
+      this.gameKey = 'vortex';
+    } else if (!this.games[this.gameKey]) {
       const keys = Object.keys(this.games);
       if (keys.length) this.gameKey = keys[0];
-    }
-    if (this.games.bandit && !this.userPickedGame) {
-      this.gameKey = 'bandit';
     }
 
     await this._ensureGameLoaded(this.gameKey);

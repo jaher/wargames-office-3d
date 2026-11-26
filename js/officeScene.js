@@ -19,7 +19,7 @@ export const CAMERA_PRESETS = {
     target: [-0.62, 1.01, -1.14],
   },
   pc: {
-    pos: [0.54, 1.44, -0.10],
+    pos: [0.53, 1.35, -0.08],
     target: [0.85, 1.04, -0.96],
   },
   cluster: {
@@ -29,6 +29,10 @@ export const CAMERA_PRESETS = {
   window: {
     pos: [-0.15, 1.54, 1.48],
     target: [-0.15, 1.58, -2.68],
+  },
+  door: {
+    pos: [-0.25, 1.32, 0.86],
+    target: [3.18, 1.12, 1.56],
   },
 };
 
@@ -50,19 +54,19 @@ const SKY_MOODS = [
     cloudShadow: new THREE.Color('#3c4460'),
     sunDir: new THREE.Vector3(-0.34, 0.14, -0.93).normalize(),
     dirLightColor: 0xffcb8c,
-    dirLightIntensity: 2.15,
+    dirLightIntensity: 2.25,
     portalColor: 0xffd7a8,
-    portalIntensity: 0.52,
+    portalIntensity: 0.48,
     hemiSky: 0xffe2be,
-    hemiGround: 0x4e3522,
-    hemiIntensity: 0.78,
-    lampIntensity: 13.0,
-    lampBounce: 1.55,
-    pendantIntensity: 0.68,
-    bounceIntensity: 1.15,
+    hemiGround: 0x3a2618,
+    hemiIntensity: 0.58,
+    lampIntensity: 14.5,
+    lampBounce: 1.05,
+    pendantIntensity: 0.56,
+    bounceIntensity: 0.80,
     beamOpacity: 0.036,
-    exposure: 1.03,
-    envIntensity: 0.88,
+    exposure: 1.04,
+    envIntensity: 0.82,
   },
   {
     id: 'twilight',
@@ -77,21 +81,21 @@ const SKY_MOODS = [
     sunGlow: new THREE.Color('#c8523e'),
     cloudLight: new THREE.Color('#b66e5e'),
     cloudShadow: new THREE.Color('#10162b'),
-    sunDir: new THREE.Vector3(0.24, 0.06, -0.96).normalize(),
+    sunDir: new THREE.Vector3(0.24, 0.34, -0.92).normalize(),
     dirLightColor: 0xffa870,
-    dirLightIntensity: 1.08,
-    portalColor: 0x8eaad6,
-    portalIntensity: 0.28,
-    hemiSky: 0x8aa2cc,
-    hemiGround: 0x523622,
-    hemiIntensity: 0.68,
-    lampIntensity: 14.5,
-    lampBounce: 1.72,
-    pendantIntensity: 0.92,
-    bounceIntensity: 1.28,
+    dirLightIntensity: 0.22,
+    portalColor: 0x9ab4dc,
+    portalIntensity: 0.42,
+    hemiSky: 0x96aad0,
+    hemiGround: 0x644024,
+    hemiIntensity: 0.72,
+    lampIntensity: 15.2,
+    lampBounce: 1.80,
+    pendantIntensity: 0.68,
+    bounceIntensity: 1.42,
     beamOpacity: 0.014,
-    exposure: 1.02,
-    envIntensity: 0.74,
+    exposure: 1.06,
+    envIntensity: 0.72,
   },
   {
     id: 'day',
@@ -462,48 +466,166 @@ function createTemperedGlassTexture() {
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d');
-  // NOTE: On Case_TemperedGlass, glTF UV y=0 is TOP of glass (canvas y=H is TOP in flipY=false glTF!) ->
-  // place subtle crisp diagonal golden-hour reflection in UPPER glass (y = 0.55H..0.95H) so lower PSU shroud stays 100% crystal clear with ZERO milky haze or dark shadow bar!
-  ctx.fillStyle = 'rgba(8, 12, 18, 0.14)';
-  ctx.fillRect(0, 0, W, H);
-  // Crisp matte-black silkscreened ceramic frit perimeter border
+  // Crystal-clear dark-smoked Corsair 5000D tempered glass (ZERO milky blue-grey fog — deep contrast + sharp upper-right/left grazing Fresnel speculars!)
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(4, 6, 10, 0.16)';
+  ctx.fillRect(28, 28, W - 56, H - 56);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(30, 30, W - 60, H - 60);
+  ctx.clip();
+  // Crisp narrow diagonal upper-left golden-hour sky specular band (leaves 80% of glass crystal clear & deep contrast!)
+  const winRefl = ctx.createLinearGradient(28, H - 28, W * 0.52, H * 0.52);
+  winRefl.addColorStop(0.0, 'rgba(255, 224, 184, 0.24)');
+  winRefl.addColorStop(0.42, 'rgba(255, 232, 200, 0.08)');
+  winRefl.addColorStop(1.0, 'rgba(210, 226, 244, 0.0)');
+  ctx.fillStyle = winRefl;
+  ctx.fillRect(30, 30, W - 60, H - 60);
+  // Razor-crisp Fresnel grazing edge highlight along the right glass bevel
+  const edgeG = ctx.createLinearGradient(W - 42, 0, W - 28, 0);
+  edgeG.addColorStop(0, 'rgba(210, 228, 245, 0.0)');
+  edgeG.addColorStop(1, 'rgba(220, 236, 252, 0.36)');
+  ctx.fillStyle = edgeG;
+  ctx.fillRect(W - 42, 30, 14, H - 60);
+  ctx.restore();
+
+  // Crisp matte-black silkscreened ceramic frit border matching real 5000D tempered glass
   ctx.strokeStyle = 'rgba(4, 6, 9, 0.99)';
   ctx.lineWidth = 30;
   ctx.strokeRect(15, 15, W - 30, H - 30);
-  // Subtle crisp inner glass bevel hairline & emerald leading glass thickness highlight
-  ctx.strokeStyle = 'rgba(165, 184, 204, 0.36)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(31, 31, W - 62, H - 62);
-  ctx.fillStyle = 'rgba(144, 218, 200, 0.52)';
-  ctx.fillRect(W - 4, 16, 4, H - 32);
-
-  // Clean sharp diagonal Fresnel reflection streak in UPPER tempered glass ONLY (NO dark bar, NO lower haze!)
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(32, 32, W - 64, H - 64);
-  ctx.clip();
-  ctx.translate(W * 0.38, H * 0.74);
-  ctx.rotate(0.42);
-  const gBand1 = ctx.createLinearGradient(0, -54, 0, 54);
-  gBand1.addColorStop(0.0, 'rgba(255, 236, 208, 0.0)');
-  gBand1.addColorStop(0.35, 'rgba(255, 236, 208, 0.24)');
-  gBand1.addColorStop(0.50, 'rgba(255, 246, 230, 0.42)');
-  gBand1.addColorStop(0.65, 'rgba(255, 236, 208, 0.22)');
-  gBand1.addColorStop(1.0, 'rgba(255, 236, 208, 0.0)');
-  ctx.fillStyle = gBand1;
-  ctx.fillRect(-W, -54, W * 2, 108);
-
-  const gBand2 = ctx.createLinearGradient(0, 74, 0, 128);
-  gBand2.addColorStop(0.0, 'rgba(255, 234, 204, 0.0)');
-  gBand2.addColorStop(0.50, 'rgba(255, 242, 222, 0.26)');
-  gBand2.addColorStop(1.0, 'rgba(255, 234, 204, 0.0)');
-  ctx.fillStyle = gBand2;
-  ctx.fillRect(-W, 74, W * 2, 54);
-  ctx.restore();
-
+  // Crisp chamfered physical glass-edge inner specular hairline
+  ctx.strokeStyle = 'rgba(208, 226, 244, 0.54)';
+  ctx.lineWidth = 1.8;
+  ctx.strokeRect(30.5, 30.5, W - 61, H - 61);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+// High-detail botanical Sansevieria (Snake Plant) variegated tiger-stripe + golden-chartreuse edge texture
+function createSnakePlantLeafPBR() {
+  const W = 256;
+  const H = 512;
+  const c = document.createElement('canvas');
+  const b = document.createElement('canvas');
+  c.width = b.width = W;
+  c.height = b.height = H;
+  const ctx = c.getContext('2d');
+  const bctx = b.getContext('2d');
+  const rng = mulberry32(417);
+
+  // Rich deep forest-green blade interior
+  const baseG = ctx.createLinearGradient(0, 0, W, 0);
+  baseG.addColorStop(0.0, '#8ba234');
+  baseG.addColorStop(0.11, '#9ab03c');
+  baseG.addColorStop(0.16, '#26451e');
+  baseG.addColorStop(0.50, '#2d5224');
+  baseG.addColorStop(0.84, '#26451e');
+  baseG.addColorStop(0.89, '#9ab03c');
+  baseG.addColorStop(1.0, '#8ba234');
+  ctx.fillStyle = baseG;
+  ctx.fillRect(0, 0, W, H);
+  bctx.fillStyle = 'rgb(128,128,128)';
+  bctx.fillRect(0, 0, W, H);
+
+  // Organic horizontal silver-sage variegated tiger bands across the blade center
+  for (let y = 14; y < H; y += 22) {
+    const bandH = 6 + rng() * 9;
+    ctx.fillStyle = `rgba(116, 150, 94, ${0.26 + rng() * 0.24})`;
+    ctx.beginPath();
+    ctx.moveTo(34, y);
+    for (let x = 44; x <= W - 34; x += 18) {
+      ctx.lineTo(x, y + (rng() - 0.5) * 9);
+    }
+    for (let x = W - 34; x >= 34; x -= 18) {
+      ctx.lineTo(x, y + bandH + (rng() - 0.5) * 9);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Fine vertical fibrous leaf striations
+  for (let x = 8; x < W - 8; x += 3) {
+    ctx.fillStyle = rng() > 0.5 ? 'rgba(18, 34, 14, 0.16)' : 'rgba(148, 178, 112, 0.10)';
+    ctx.fillRect(x, 0, 1.4, H);
+    bctx.fillStyle = rng() > 0.5 ? 'rgb(144,144,144)' : 'rgb(112,112,112)';
+    bctx.fillRect(x, 0, 1.5, H);
+  }
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  const bumpMap = new THREE.CanvasTexture(b);
+  bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
+  return { map, bumpMap };
+}
+
+// High-detail botanical Fiddle-Leaf Fig leaf venation, organic color variation & micro-relief bump texture
+function createFigLeafPBR() {
+  const S = 512;
+  const c = document.createElement('canvas');
+  const b = document.createElement('canvas');
+  c.width = b.width = S;
+  c.height = b.height = S;
+  const ctx = c.getContext('2d');
+  const bctx = b.getContext('2d');
+  const rng = mulberry32(812);
+
+  const g = ctx.createRadialGradient(S * 0.5, S * 0.45, 24, S * 0.5, S * 0.5, S * 0.62);
+  g.addColorStop(0.0, '#3e6422');
+  g.addColorStop(0.55, '#2b4b18');
+  g.addColorStop(1.0, '#1e3811');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  bctx.fillStyle = 'rgb(122,122,122)';
+  bctx.fillRect(0, 0, S, S);
+
+  // Subtle organic chlorophyll mottling patches
+  for (let i = 0; i < 42; i++) {
+    const rx = rng() * S;
+    const ry = rng() * S;
+    const rr = 28 + rng() * 68;
+    const mg = ctx.createRadialGradient(rx, ry, 2, rx, ry, rr);
+    mg.addColorStop(0, rng() > 0.5 ? 'rgba(92, 134, 42, 0.16)' : 'rgba(20, 38, 12, 0.18)');
+    mg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = mg;
+    ctx.fillRect(rx - rr, ry - rr, rr * 2, rr * 2);
+  }
+
+  // Prominent pale-chartreuse central midrib & branching pinnate veins (iconic Ficus lyrata look!)
+  ctx.strokeStyle = 'rgba(136, 168, 72, 0.68)';
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(S * 0.5, S);
+  ctx.lineTo(S * 0.5, 18);
+  ctx.stroke();
+  bctx.strokeStyle = 'rgb(218,218,218)';
+  bctx.lineWidth = 8;
+  bctx.beginPath();
+  bctx.moveTo(S * 0.5, S);
+  bctx.lineTo(S * 0.5, 18);
+  bctx.stroke();
+
+  for (let i = 0; i < 8; i++) {
+    const y0 = S * 0.88 - i * (S * 0.105);
+    for (const side of [-1, 1]) {
+      ctx.strokeStyle = 'rgba(128, 162, 68, 0.52)';
+      ctx.lineWidth = 3.2 - i * 0.18;
+      ctx.beginPath();
+      ctx.moveTo(S * 0.5, y0);
+      ctx.quadraticCurveTo(S * 0.5 + side * S * 0.24, y0 - 26, S * 0.5 + side * S * 0.46, y0 - 68);
+      ctx.stroke();
+      bctx.strokeStyle = 'rgb(186,186,186)';
+      bctx.lineWidth = 4.0;
+      bctx.beginPath();
+      bctx.moveTo(S * 0.5, y0);
+      bctx.quadraticCurveTo(S * 0.5 + side * S * 0.24, y0 - 26, S * 0.5 + side * S * 0.46, y0 - 68);
+      bctx.stroke();
+    }
+  }
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  const bumpMap = new THREE.CanvasTexture(b);
+  return { map, bumpMap };
 }
 
 function createWindowGlassReflectionTexture() {
@@ -513,16 +635,23 @@ function createWindowGlassReflectionTexture() {
   c.width = W;
   c.height = H;
   const ctx = c.getContext('2d');
-  // Subtle optical window glass haze + warm golden interior reflections & faint atmospheric dust sheen!
-  ctx.fillStyle = 'rgba(248, 232, 212, 0.12)';
+  // Subtle architectural glass optical sheen + soft warm interior desk-lamp reflection on left glass pane!
+  ctx.fillStyle = 'rgba(226, 234, 248, 0.08)';
   ctx.fillRect(0, 0, W, H);
   const g = ctx.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0.0, 'rgba(255, 216, 168, 0.34)');
-  g.addColorStop(0.24, 'rgba(255, 236, 208, 0.10)');
-  g.addColorStop(0.48, 'rgba(255, 224, 184, 0.24)');
-  g.addColorStop(0.76, 'rgba(216, 230, 248, 0.08)');
-  g.addColorStop(1.0, 'rgba(255, 216, 174, 0.30)');
+  g.addColorStop(0.0, 'rgba(255, 212, 162, 0.28)');
+  g.addColorStop(0.28, 'rgba(255, 232, 204, 0.08)');
+  g.addColorStop(0.55, 'rgba(210, 228, 250, 0.18)');
+  g.addColorStop(0.80, 'rgba(196, 218, 248, 0.06)');
+  g.addColorStop(1.0, 'rgba(255, 214, 168, 0.24)');
   ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  // Soft warm ghost reflection of the tungsten Anglepoise desk lamp on the lower-left pane
+  const lg = ctx.createRadialGradient(W * 0.22, H * 0.68, 4, W * 0.22, H * 0.68, 72);
+  lg.addColorStop(0.0, 'rgba(255, 186, 98, 0.26)');
+  lg.addColorStop(0.5, 'rgba(255, 170, 82, 0.09)');
+  lg.addColorStop(1.0, 'rgba(255, 160, 72, 0.0)');
+  ctx.fillStyle = lg;
   ctx.fillRect(0, 0, W, H);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -943,8 +1072,8 @@ export class OfficeScene {
       });
       this.composer = new EffectComposer(this.renderer, rt);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
-      // Restrained photographic bloom (high threshold 1.48 eliminates any specular blowout patches!)
-      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.12, 0.42, 1.48);
+      // Restrained photographic bloom (soft halation on warm lamp & RGB accents without specular blowout!)
+      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.11, 0.42, 1.40);
       this.composer.addPass(this.bloomPass);
       this.composer.addPass(new OutputPass());
     } catch {
@@ -1195,17 +1324,17 @@ export class OfficeScene {
       seed: 19,
       repeatX: 2.0,
       repeatY: 2.2,
-      roughBase: 128,
+      roughBase: 196,
       size: 1024,
     });
     const floorMat = new THREE.MeshStandardMaterial({
       map: floorPBR.map,
       roughnessMap: floorPBR.roughnessMap,
       bumpMap: floorPBR.bumpMap,
-      bumpScale: 0.012,
-      roughness: 0.58,
+      bumpScale: 0.014,
+      roughness: 0.88,
       metalness: 0.02,
-      envMapIntensity: 0.45,
+      envMapIntensity: 0.26,
     });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -1226,12 +1355,12 @@ export class OfficeScene {
     this.scene.add(rug);
     this._addContactShadow(this.scene, -0.14, 0.0018, -0.35, 3.54, 2.54, 0.52);
 
-    // Warm matte architectural Venetian plaster walls with restrained envMap + corner AO depth!
+    // Warm matte architectural Venetian plaster walls with tactile limewash bump & corner AO depth!
     const wallPBR = createPlasterPBR('#dfd3c0', 71);
     const wallMat = new THREE.MeshStandardMaterial({
       map: wallPBR.map,
       bumpMap: wallPBR.bumpMap,
-      bumpScale: 0.008,
+      bumpScale: 0.016,
       roughness: 0.94,
       envMapIntensity: 0.18,
     });
@@ -1296,11 +1425,12 @@ export class OfficeScene {
       map: sillPBR.map,
       roughnessMap: sillPBR.roughnessMap,
       bumpMap: sillPBR.bumpMap,
-      bumpScale: 0.008,
-      roughness: 0.56,
-      metalness: 0.04,
+      bumpScale: 0.014,
+      roughness: 0.44,
+      metalness: 0.05,
+      envMapIntensity: 0.65,
       emissive: new THREE.Color(0x28160a),
-      emissiveIntensity: 0.45,
+      emissiveIntensity: 0.38,
     });
     const addMullion = (w, h, d, x, y, z) => {
       const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, 0.004), winWoodMat);
@@ -1336,14 +1466,14 @@ export class OfficeScene {
     addRimBead(4.78, 0.016, 0.04, -0.15, 2.252, wz + 0.055);
     addRimBead(4.78, 0.016, 0.04, -0.15, 2.780, wz + 0.07);
 
-    // Architectural reflective window glass sheet (MeshBasicMaterial -> silky warm interior glass reflection & subtle optical haze with ZERO harsh point-light white orbs!)
+    // Architectural reflective window glass sheet (silky interior glass reflection & subtle edge mist separating skyline from room!)
     const winGlass = new THREE.Mesh(
       new THREE.PlaneGeometry(4.76, 2.20),
       new THREE.MeshBasicMaterial({
         map: createWindowGlassReflectionTexture(),
         color: 0xffffff,
         transparent: true,
-        opacity: 0.44,
+        opacity: 0.52,
         depthWrite: false,
       })
     );
@@ -1399,8 +1529,8 @@ export class OfficeScene {
       curtainModel.traverse((obj) => {
         if (obj.isMesh && obj.material) {
           obj.material.roughness = 0.94;
-          obj.material.emissive = new THREE.Color(0x52341a);
-          obj.material.emissiveIntensity = 0.18;
+          obj.material.emissive = new THREE.Color(0x6e4420);
+          obj.material.emissiveIntensity = 0.24;
           this.curtainMats = this.curtainMats || [];
           this.curtainMats.push(obj.material);
         }
@@ -1434,8 +1564,8 @@ export class OfficeScene {
       this.scene.add(slat);
     }
 
-    // Crisp baseboards
-    const trimMat = new THREE.MeshStandardMaterial({ color: 0xdfd6c7, roughness: 0.58 });
+    // Architectural warm-taupe baseboards (right wall splits cleanly around the 914mm walnut entrance door at z = +1.62!)
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0xa99d8d, roughness: 0.74 });
     const addBaseboard = (w, h, d, x, y, z) => {
       const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), trimMat);
       b.position.set(x, y, z);
@@ -1443,8 +1573,24 @@ export class OfficeScene {
       this.scene.add(b);
     };
     addBaseboard(0.024, 0.11, D, -3.188, 0.055, 0.1);
-    addBaseboard(0.024, 0.11, D, 3.188, 0.055, 0.1);
+    // Right wall baseboard split cleanly on either side of the office entrance door casing (z = 1.07..2.17)
+    addBaseboard(0.024, 0.11, 3.67, 3.188, 0.055, -0.765);
+    addBaseboard(0.024, 0.11, 0.63, 3.188, 0.055, 2.485);
     addBaseboard(W, 0.11, 0.024, 0, 0.055, -2.588);
+    addBaseboard(W, 0.11, 0.024, 0, 0.055, 2.788);
+
+    // Realistic Architectural Oiled-Walnut Office Entrance Door (with brass lever, hinges, threshold & wall dimmer switch!)
+    this._loadGLB('assets/models/office_door.glb', (door) => {
+      door.position.set(3.196, 0, 1.62);
+      door.rotation.y = -Math.PI / 2;
+      door.traverse((obj) => {
+        if (obj.isMesh && obj.material?.map) {
+          obj.material.map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        }
+      });
+      this._addContactShadow(this.scene, 3.06, 0.0025, 1.62, 0.34, 1.18, 0.78);
+      this.scene.add(door);
+    });
 
     // Subtle ceiling downlights + linear brass-accent pendant
     const fixtureMat = new THREE.MeshStandardMaterial({ color: 0x1e222a, roughness: 0.38, metalness: 0.78 });
@@ -1557,15 +1703,28 @@ export class OfficeScene {
     this.rightFillLight.position.set(1.56, 1.34, -0.26);
     this.scene.add(this.rightFillLight);
 
-    // Subtle warm gallery wall-wash near right wall illuminating the matte SIGNAL / NOISE print naturally!
-    this.posterAccentLight = new THREE.PointLight(0xffd29a, 0.34, 2.2, 1.8);
-    this.posterAccentLight.position.set(2.38, 1.98, -1.96);
+    // Warm gallery wall-wash near right wall illuminating the cobalt SIGNAL + NOISE print & Venetian plaster naturally!
+    this.posterAccentLight = new THREE.PointLight(0xffcb8c, 0.42, 2.8, 1.6);
+    this.posterAccentLight.position.set(2.34, 1.98, -1.86);
     this.scene.add(this.posterAccentLight);
 
-    // Restrained moody interior PC accent light (preserves deep shadow contrast & metallic highlights!)
-    this.pcRgbLight = new THREE.PointLight(0xc2dcf0, 0.15, 0.56, 2.2);
-    this.pcRgbLight.position.set(0.84, 1.08, -0.94);
+    // Subtle foreground chair-back warm/cool fill so Herman Miller Aeron translucent Pellicle mesh weave reads cleanly!
+    this.chairRimLight = new THREE.PointLight(0xd8c6b0, 0.38, 2.2, 1.6);
+    this.chairRimLight.position.set(-1.35, 1.05, 1.15);
+    this.scene.add(this.chairRimLight);
+
+    // Localized cyan-teal RGB bounce lights inside the Corsair 5000D casting rich cool bounce onto MSI VRM heatsinks & RTX 5090 FE frame!
+    this.pcRgbLight = new THREE.PointLight(0x5ad8fc, 0.44, 0.86, 1.9);
+    this.pcRgbLight.position.set(0.86, 1.24, -0.98);
     this.scene.add(this.pcRgbLight);
+    // Front-intake cyan bounce light inside the 3x front RX120 fans illuminating RAM & GPU front edge!
+    this.pcFrontRgbBounce = new THREE.PointLight(0x46d2f8, 0.24, 0.56, 2.0);
+    this.pcFrontRgbBounce.position.set(0.96, 1.09, -0.80);
+    this.scene.add(this.pcFrontRgbBounce);
+    // Subtle lower motherboard/M.2 fill strictly capped ABOVE the desk surface (0.99 - 0.77 = 0.22m > 0.20m -> ZERO desk bleed!)
+    this.pcLowerFill = new THREE.PointLight(0x7cd6f4, 0.11, 0.20, 2.0);
+    this.pcLowerFill.position.set(0.82, 0.99, -0.96);
+    this.scene.add(this.pcLowerFill);
   }
 
   // ---------- 4. Bookshelf, Books, Framed Art & Plants ----------
@@ -1683,10 +1842,9 @@ export class OfficeScene {
         new THREE.PlaneGeometry(w, h),
         new THREE.MeshStandardMaterial({
           map: createWallArtTexture(variant),
-          emissiveMap: createWallArtTexture(variant),
-          emissive: new THREE.Color(0xffffff),
-          emissiveIntensity: variant === 1 ? 0.06 : 0.04,
-          roughness: 0.68,
+          roughness: 0.56,
+          metalness: 0.02,
+          envMapIntensity: 0.35,
         })
       );
       art.position.z = 0.015;
@@ -1699,28 +1857,109 @@ export class OfficeScene {
     // Iconic cobalt-blue SIGNAL / NOISE poster cleanly visible & 100% unobstructed between right curtain and right viewport edge!
     addFramedArt(2.64, 1.72, -2.56, 0, 0.36, 0.46, 1);
 
-    // Organic Blender Fiddle-Leaf Fig in Terracotta Planter with subtle warm backlit botanical leaf translucency!
+    // Helper to ensure procedural Blender botanical meshes have clean 0..1 UVs so leaf venation & variegation textures map accurately!
+    const ensureLeafUVs = (geo) => {
+      if (geo.attributes.uv) return;
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox;
+      const pos = geo.attributes.position;
+      const sx = Math.max(0.001, bb.max.x - bb.min.x);
+      const sy = Math.max(0.001, bb.max.y - bb.min.y);
+      const sz = Math.max(0.001, bb.max.z - bb.min.z);
+      const uvs = new Float32Array(pos.count * 2);
+      for (let i = 0; i < pos.count; i++) {
+        const u = (pos.getX(i) - bb.min.x) / sx;
+        const v = sy >= sz ? (pos.getY(i) - bb.min.y) / sy : (pos.getZ(i) - bb.min.z) / sz;
+        uvs[i * 2] = u;
+        uvs[i * 2 + 1] = v;
+      }
+      geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    };
+
+    // Organic Blender Fiddle-Leaf Fig in textured terracotta planter with realistic pinnate leaf venation & natural satin-matte botanical finish!
+    const figLeafPBR = createFigLeafPBR();
+    const potPBR = createPlasterPBR('#9a6349', 51);
     this._loadGLB('assets/models/fiddle_fig.glb', (fig) => {
       fig.traverse((obj) => {
-        if (obj.isMesh && obj.material && obj.material.name?.startsWith('Fig_Leaf')) {
-          obj.material.emissive = new THREE.Color(0x284816);
-          obj.material.emissiveIntensity = 0.24;
-          obj.material.roughness = 0.54;
+        if (!obj.isMesh || !obj.material) return;
+        if (obj.material.name?.startsWith('Fig_Leaf')) {
+          ensureLeafUVs(obj.geometry);
+          obj.material = new THREE.MeshPhysicalMaterial({
+            name: obj.material.name,
+            color: new THREE.Color(0xf4f6ec),
+            map: figLeafPBR.map,
+            bumpMap: figLeafPBR.bumpMap,
+            bumpScale: 0.018,
+            roughness: 0.50,
+            metalness: 0.0,
+            clearcoat: 0.16,
+            clearcoatRoughness: 0.45,
+            sheen: 0.28,
+            sheenColor: new THREE.Color(0x5c7c28),
+            sheenRoughness: 0.65,
+            emissive: new THREE.Color(0x283e0e),
+            emissiveIntensity: 0.18,
+            side: THREE.DoubleSide,
+          });
+        } else if ((obj.material.name || '').toLowerCase().includes('pot') || (obj.material.name || '').toLowerCase().includes('terra')) {
+          obj.material.map = potPBR.map;
+          obj.material.bumpMap = potPBR.bumpMap;
+          obj.material.bumpScale = 0.014;
+          obj.material.roughness = 0.92;
         }
       });
       fig.position.set(-1.98, 0, -1.48);
       fig.rotation.y = 0.55;
-      this._addContactShadow(this.scene, -1.98, 0.003, -1.48, 0.72, 0.72, 0.76);
+      this._addContactShadow(this.scene, -1.98, 0.003, -1.48, 0.78, 0.78, 0.94);
+      this._addContactShadow(this.scene, -1.98, 0.004, -1.48, 0.44, 0.44, 0.98);
       this.scene.add(fig);
     });
 
-    // Blender-Sculpted Organic Sansevieria (Snake Plant) in Ribbed Ceramic Planter cleanly inside right viewport!
+    // Blender-Sculpted Organic Sansevieria (Snake Plant) with variegated tiger-stripe + chartreuse edge texture & matte stoneware planter!
+    const snakeLeafPBR = createSnakePlantLeafPBR();
+    const stonePotPBR = createPlasterPBR('#8c8073', 93);
     this._loadGLB('assets/models/snake_plant.glb', (snake) => {
+      snake.traverse((obj) => {
+        if (!obj.isMesh || !obj.material) return;
+        const mn = (obj.material.name || '').toLowerCase();
+        if (mn.includes('pot') || mn.includes('planter') || mn.includes('ceramic')) {
+          obj.material.map = stonePotPBR.map;
+          obj.material.bumpMap = stonePotPBR.bumpMap;
+          obj.material.bumpScale = 0.015;
+          obj.material.color.setHex(0xffffff);
+          obj.material.roughness = 0.94;
+          obj.material.metalness = 0.02;
+        } else if (mn.includes('leaf') || mn.includes('blade') || mn.includes('snake')) {
+          ensureLeafUVs(obj.geometry);
+          obj.material = new THREE.MeshPhysicalMaterial({
+            name: obj.material.name,
+            color: new THREE.Color(0xf6f8ef),
+            map: snakeLeafPBR.map,
+            bumpMap: snakeLeafPBR.bumpMap,
+            bumpScale: 0.016,
+            roughness: 0.46,
+            metalness: 0.0,
+            clearcoat: 0.18,
+            clearcoatRoughness: 0.44,
+            sheen: 0.24,
+            sheenColor: new THREE.Color(0x5a7e28),
+            emissive: new THREE.Color(0x1c320e),
+            emissiveIntensity: 0.16,
+            side: THREE.DoubleSide,
+          });
+        }
+      });
       snake.position.set(2.22, 0, -1.52);
       snake.rotation.y = -0.35;
-      this._addContactShadow(this.scene, 2.22, 0.003, -1.52, 0.58, 0.58, 0.72);
+      this._addContactShadow(this.scene, 2.22, 0.003, -1.52, 0.64, 0.64, 0.94);
+      this._addContactShadow(this.scene, 2.22, 0.004, -1.52, 0.38, 0.38, 0.98);
       this.scene.add(snake);
     });
+
+    // Subtle floor-to-baseboard crevice AO strip along back & side walls for deeply grounded architectural realism
+    this._addContactShadow(this.scene, 0.0, 0.0025, -2.52, 7.6, 0.34, 0.76);
+    this._addContactShadow(this.scene, 3.05, 0.0025, -0.4, 0.34, 5.4, 0.68);
+    this._addContactShadow(this.scene, -3.12, 0.0025, -0.4, 0.34, 5.4, 0.68);
   }
 
   // ---------- 5. Uplift V2 Walnut Desk + Blender Real Peripherals (NO speakers per owner!) ----------
@@ -1733,25 +1972,25 @@ export class OfficeScene {
     const deskW = 2.52;
     const deskD = 0.90;
 
-    // Rich oiled dark American walnut tabletop (high-res wood pores + directional satin roughness, zero glare blowout!)
+    // Deep, rich oiled American walnut tabletop (rich visible grain + satin oil sheen, ZERO pinkish sky-mirror washout!)
     const walnutPBR = createWoodPBR({
-      base: '#3d2313',
-      grain: '#170a04',
+      base: '#361e0f',
+      grain: '#0e0502',
       plankLines: false,
       seed: 108,
       repeatX: 2.2,
       repeatY: 1.1,
-      roughBase: 165,
+      roughBase: 178,
       size: 1024,
     });
     const walnutMat = new THREE.MeshStandardMaterial({
       map: walnutPBR.map,
       roughnessMap: walnutPBR.roughnessMap,
       bumpMap: walnutPBR.bumpMap,
-      bumpScale: 0.024,
-      roughness: 0.74,
-      metalness: 0.01,
-      envMapIntensity: 0.24,
+      bumpScale: 0.034,
+      roughness: 0.80,
+      metalness: 0.0,
+      envMapIntensity: 0.14,
     });
     const metalMat = new THREE.MeshStandardMaterial({
       color: 0x1a1e26,
@@ -1783,7 +2022,8 @@ export class OfficeScene {
       footBar.castShadow = true;
       deskGroup.add(footBar);
 
-      this._addContactShadow(deskGroup, lx, 0.018, deskZ, 0.32, deskD + 0.02, 0.86);
+      this._addContactShadow(deskGroup, lx, 0.0175, deskZ, 0.24, deskD - 0.06, 0.96);
+      this._addContactShadow(deskGroup, lx, 0.0182, deskZ, 0.13, deskD - 0.14, 1.0);
     }
     // Deep, soft ambient occlusion shadow cast by the 2.52m solid walnut desktop onto the rug & floor beneath it!
     this._addContactShadow(deskGroup, deskX, 0.0175, deskZ + 0.04, deskW + 0.24, deskD + 0.34, 0.78);
@@ -1809,30 +2049,201 @@ export class OfficeScene {
       deskGroup.add(books);
     });
 
-    // Blender Real Peripherals (Keychron Q1 Pro, Logitech MX Master 3S, Anglepoise Type 75, Ceramic Mug — NO speakers!)
-    this._loadGLB('assets/models/keychron_q1.glb', (kb) => {
+    // Authentic Corsair Peripherals (Corsair K70 PRO TKL Black Aluminum Keyboard + Corsair M75 Wireless Black Mouse — NO speakers!)
+    this._loadGLB('assets/models/corsair_k70_kb.glb', (kb) => {
       kb.position.set(-0.68, sy + 0.0045, -0.72);
-      this._addContactShadow(deskGroup, -0.68, sy + 0.0048, -0.72, 0.36, 0.18, 0.82);
+      kb.traverse((obj) => {
+        if (obj.isMesh && obj.material?.map) {
+          obj.material.map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        }
+      });
+      this._addContactShadow(deskGroup, -0.68, sy + 0.0048, -0.72, 0.39, 0.16, 0.86);
       deskGroup.add(kb);
     });
 
-    this._loadGLB('assets/models/mx_master_3s.glb', (mouse) => {
+    this._loadGLB('assets/models/corsair_mouse.glb', (mouse) => {
       mouse.position.set(-0.30, sy + 0.0045, -0.71);
-      mouse.rotation.y = -0.06;
-      this._addContactShadow(deskGroup, -0.30, sy + 0.0048, -0.71, 0.12, 0.16, 0.78);
+      mouse.rotation.y = -0.08;
+      mouse.traverse((obj) => {
+        if (obj.isMesh && obj.material?.map) {
+          obj.material.map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        }
+      });
+      this._addContactShadow(deskGroup, -0.30, sy + 0.0048, -0.71, 0.11, 0.15, 0.84);
       deskGroup.add(mouse);
     });
+
+    // Meta Ray-Ban Display Smart Glasses (Shiny Black) & Meta Neural Band (Charcoal Black sEMG Wristband) with tight desk AO!
+    this._loadGLB('assets/models/meta_rayban_display.glb', (glasses) => {
+      glasses.position.set(0.06, sy, -0.59);
+      glasses.rotation.y = -0.34;
+      glasses.traverse((obj) => {
+        if (obj.isMesh && obj.material && obj.material.name === 'MetaRB_Lens') {
+          obj.material.transparent = true;
+          obj.material.opacity = 0.56;
+          obj.material.depthWrite = false;
+        } else if (obj.isMesh && obj.material && obj.material.name === 'MetaRB_DisplayLens') {
+          obj.material.transparent = true;
+          obj.material.opacity = 0.58;
+          obj.material.emissiveIntensity = 0.02;
+          obj.material.depthWrite = false;
+        } else if (obj.isMesh && obj.material && obj.material.name === 'MetaRB_ShinyBlack') {
+          obj.material.envMapIntensity = 1.6;
+        }
+      });
+      this._addContactShadow(deskGroup, 0.06, sy + 0.0007, -0.59, 0.21, 0.18, 0.94);
+      this._addContactShadow(deskGroup, 0.06, sy + 0.0011, -0.59, 0.14, 0.09, 0.98);
+      deskGroup.add(glasses);
+    });
+
+    this._loadGLB('assets/models/meta_neural_band.glb', (band) => {
+      band.position.set(0.28, sy + 0.002, -0.58);
+      // Resting gently on its side edge at a 3/4 angle so the hollow oval sEMG wristband loop & clasp read unmistakably from overview!
+      band.rotation.set(0.28, 0.72, 0.14);
+      band.traverse((obj) => {
+        if (obj.isMesh && obj.material && obj.material.name === 'NeuralBand_CharcoalTextile') {
+          obj.material.color.setHex(0x6c7588);
+          obj.material.roughness = 0.68;
+        }
+      });
+      this._addContactShadow(deskGroup, 0.28, sy + 0.0007, -0.58, 0.14, 0.12, 0.96);
+      this._addContactShadow(deskGroup, 0.28, sy + 0.0011, -0.58, 0.09, 0.08, 1.0);
+      deskGroup.add(band);
+    });
+
+    // Tripp Lite ISOBAR8ULTRA 8-Outlet All-Metal Surge Suppressor Seated Flush on Floor/Rug + Grounded AO + Direct Rear Wall-Outlet Routing!
+    const isoX = 0.44;
+    const isoY = 0.0155; // Flush on top of the rug surface with tight under-chassis contact shadow!
+    const isoZ = -1.30;
+    const isoRotY = -0.14;
+    this._loadGLB('assets/models/tripp_lite_isobar8.glb', (isobar) => {
+      isobar.position.set(isoX, isoY, isoZ);
+      isobar.rotation.y = isoRotY;
+      isobar.traverse((obj) => {
+        if (obj.isMesh && obj.material?.map) {
+          obj.material.map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        }
+      });
+      this._addContactShadow(deskGroup, isoX, isoY + 0.0006, isoZ, 0.36, 0.20, 0.96);
+      this._addContactShadow(deskGroup, isoX, isoY + 0.0011, isoZ, 0.28, 0.13, 1.0);
+      deskGroup.add(isobar);
+    });
+
+    // Realistic black AC power cords bundled naturally with gentle gravity slack into a tidy rear drop spine into the Tripp Lite ISOBAR8ULTRA!
+    const acCordMat = new THREE.MeshStandardMaterial({ color: 0x0e1014, roughness: 0.80, metalness: 0.04 });
+    const acPlugMat = new THREE.MeshStandardMaterial({ color: 0x14171d, roughness: 0.64, metalness: 0.08 });
+    const addAcCord = (pts, radius = 0.0044, addPlug = true) => {
+      const curve = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)));
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 36, radius, 8, false), acCordMat);
+      tube.castShadow = true;
+      deskGroup.add(tube);
+      if (addPlug) {
+        const end = pts[pts.length - 1];
+        const plug = new THREE.Mesh(new RoundedBoxGeometry(0.022, 0.024, 0.024, 2, 0.004), acPlugMat);
+        plug.position.set(end[0], end[1] + 0.010, end[2]);
+        plug.rotation.y = isoRotY;
+        deskGroup.add(plug);
+      }
+    };
+    const isoTopY = isoY + 0.067;
+    const isoPt = (lx, lz) => {
+      const c = Math.cos(isoRotY), s = Math.sin(isoRotY);
+      return [isoX + lx * c + lz * s, isoTopY, isoZ - lx * s + lz * c];
+    };
+    // 1. Corsair HX1500i PSU heavy-duty AC cord (runs under rear cable beam then drops cleanly along the bundled spine with natural slack!)
+    addAcCord([
+      [0.98, sy + 0.08, -1.24],
+      [0.92, sy + 0.006, -1.41],
+      [0.84, 0.68, -1.43],
+      [0.54, 0.64, -1.43],
+      [0.50, 0.34, -1.42],
+      [0.55, 0.14, -1.36],
+      isoPt(0.084, 0.016),
+    ], 0.0052);
+    // 2. 6x DGX Spark + 2x ASUS GX10 cluster primary power feeds (bundled neatly down the rear vertical spine with gentle floor slack!)
+    addAcCord([
+      [0.34, sy + 0.16, -1.19],
+      [0.36, sy + 0.006, -1.41],
+      [0.44, 0.42, -1.43],
+      [0.47, 0.14, -1.39],
+      isoPt(0.043, -0.018),
+    ], 0.0048);
+    addAcCord([
+      [0.28, sy + 0.05, -1.19],
+      [0.31, sy + 0.006, -1.41],
+      [0.41, 0.38, -1.43],
+      [0.45, 0.13, -1.35],
+      isoPt(0.043, 0.016),
+    ], 0.0046);
+    // 3. MikroTik CRS804 switch AC power cord (joins the rear bundled spine cleanly)
+    addAcCord([
+      [0.04, sy + 0.025, -1.24],
+      [0.08, sy + 0.006, -1.41],
+      [0.36, 0.64, -1.43],
+      [0.42, 0.36, -1.43],
+      [0.41, 0.13, -1.38],
+      isoPt(0.002, -0.018),
+    ], 0.0042);
+    // 4. Dell UltraSharp U3425WE monitor AC cord (tucked along underside rear beam -> joins spine -> gentle slack into Bank 1)
+    addAcCord([
+      [-0.60, sy + 0.18, -1.22],
+      [-0.58, sy + 0.006, -1.41],
+      [-0.44, 0.68, -1.43],
+      [0.34, 0.66, -1.43],
+      [0.39, 0.34, -1.42],
+      [0.38, 0.13, -1.35],
+      isoPt(-0.039, 0.016),
+    ], 0.0044);
+    // 5. Anglepoise desk lamp cord (tucked cleanly under rear beam -> joins spine -> Bank 1 rear)
+    addAcCord([
+      [-1.22, sy + 0.006, -1.16],
+      [-1.20, sy + 0.006, -1.41],
+      [-1.08, 0.68, -1.43],
+      [0.32, 0.67, -1.44],
+      [0.38, 0.32, -1.43],
+      [0.37, 0.12, -1.38],
+      isoPt(-0.039, -0.018),
+    ], 0.0036);
+    // 6. Tripp Lite ISOBAR8ULTRA heavy-duty 12 ft main power cord routing cleanly straight BACKWARD to the wall duplex outlet directly behind the desk!
+    const cordStart = isoPt(-0.130, 0.0);
+    cordStart[1] = isoY + 0.024;
+    addAcCord([
+      cordStart,
+      [isoX - 0.17, 0.021, isoZ - 0.06],
+      [isoX - 0.14, 0.020, -1.62],
+      [0.44, 0.020, -2.18],
+      [0.48, 0.024, -2.51],
+      [0.48, 0.165, -2.535],
+    ], 0.0062, false);
+    // Crisp wall duplex AC outlet plate + seated right-angle black NEMA plug directly behind the desk!
+    const wallOutlet = new THREE.Mesh(
+      new RoundedBoxGeometry(0.072, 0.114, 0.010, 2, 0.002),
+      new THREE.MeshStandardMaterial({ color: 0xe2dcd2, roughness: 0.65 })
+    );
+    wallOutlet.position.set(0.48, 0.18, -2.56);
+    deskGroup.add(wallOutlet);
+    const wallPlug = new THREE.Mesh(
+      new RoundedBoxGeometry(0.026, 0.030, 0.024, 2, 0.004),
+      acPlugMat
+    );
+    wallPlug.position.set(0.48, 0.165, -2.544);
+    deskGroup.add(wallPlug);
 
     this._loadGLB('assets/models/anglepoise_lamp.glb', (lamp) => {
       lamp.traverse((obj) => {
         if (obj.isMesh && obj.material && obj.material.isMeshStandardMaterial) {
-          obj.material.envMapIntensity = 0.55;
+          // Satin warm brushed brass (prevents overexposed white specular glare on the articulated arm!)
+          obj.material.envMapIntensity = 0.30;
+          if (obj.material.metalness > 0.4) {
+            obj.material.roughness = Math.max(obj.material.roughness, 0.42);
+            obj.material.color.multiplyScalar(0.84);
+          }
         }
       });
       lamp.position.set(-1.22, sy, -1.04);
       // Angled in 3/4 profile so iconic articulated parallel arms & chrome tension springs read clearly!
       lamp.rotation.y = 1.24;
-      this._addContactShadow(deskGroup, -1.22, sy + 0.0008, -1.04, 0.25, 0.25, 0.84);
+      this._addContactShadow(deskGroup, -1.22, sy + 0.0008, -1.04, 0.26, 0.26, 0.90);
       deskGroup.add(lamp);
     });
 
@@ -1867,23 +2278,33 @@ export class OfficeScene {
 
     this.scene.add(deskGroup);
 
-    // Herman Miller Aeron Chair with matte elastomeric woven charcoal-silver Pellicle mesh (ZERO harsh white seat glare!)
+    // Herman Miller Aeron Chair with clearly visible translucent woven Pellicle mesh & sculpted satin-graphite PostureFit frame!
     this._loadGLB('assets/models/aeron_chair.glb', (aeron) => {
       aeron.traverse((obj) => {
-        if (obj.isMesh && obj.material?.name === 'Aeron_PellicleMesh') {
+        if (!obj.isMesh || !obj.material) return;
+        if (obj.material.name === 'Aeron_PellicleMesh') {
           obj.material.side = THREE.DoubleSide;
+          obj.material.color.setHex(0x646e80);
+          obj.material.emissive = new THREE.Color(0x242b36);
+          obj.material.emissiveIntensity = 0.28;
           obj.material.transparent = true;
-          obj.material.opacity = 0.90;
-          obj.material.roughness = 0.78;
-          obj.material.metalness = 0.04;
-          obj.material.envMapIntensity = 0.25;
+          obj.material.opacity = 0.92;
+          obj.material.roughness = 0.64;
+          obj.material.metalness = 0.08;
+          obj.material.envMapIntensity = 0.50;
           obj.material.depthWrite = true;
           obj.castShadow = true;
+        } else {
+          // Satin graphite-metallic sculpted finish on spine, lumbar PostureFit pads & arm frames (eliminates flat dark blocks!)
+          obj.material.color.setHex(0x2b303a);
+          obj.material.roughness = 0.44;
+          obj.material.metalness = 0.36;
+          obj.material.envMapIntensity = 0.78;
         }
       });
-      aeron.position.set(-1.14, 0, 0.28);
-      aeron.rotation.y = Math.PI + 0.42;
-      this._addContactShadow(this.scene, -1.14, 0.018, 0.28, 0.94, 0.94, 0.84);
+      aeron.position.set(-0.92, 0, 0.34);
+      aeron.rotation.y = Math.PI + 0.32;
+      this._addContactShadow(this.scene, -0.92, 0.018, 0.34, 0.96, 0.96, 0.92);
       this.scene.add(aeron);
     });
   }
@@ -1943,46 +2364,96 @@ export class OfficeScene {
     pcGroup.rotation.y = 0.56;
 
     this._loadGLB('assets/models/corsair_rtx5090.glb', (pcModel) => {
+      const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
       pcModel.traverse((obj) => {
         if (!obj.isMesh) return;
         obj.userData.camPreset = 'pc';
         this.clickableMeshes.push(obj);
 
         const matName = obj.material?.name || '';
+        if (obj.material?.map) {
+          obj.material.map.anisotropy = maxAniso;
+          obj.material.map.needsUpdate = true;
+        }
+        if (obj.material?.roughnessMap) {
+          obj.material.roughnessMap.anisotropy = maxAniso;
+          obj.material.roughnessMap.needsUpdate = true;
+        }
+
         if (matName === 'Corsair_TemperedGlass') {
           const glassTex = createTemperedGlassTexture();
-          obj.material = new THREE.MeshStandardMaterial({
+          glassTex.anisotropy = maxAniso;
+          obj.material = new THREE.MeshPhysicalMaterial({
             map: glassTex,
             emissiveMap: glassTex,
-            emissive: new THREE.Color(0xffe9cc),
-            emissiveIntensity: 0.56,
-            color: 0x0a1018,
+            emissive: new THREE.Color(0xffe8cb),
+            emissiveIntensity: 0.12,
+            color: 0xffffff,
             side: THREE.DoubleSide,
             transparent: true,
-            opacity: 0.78,
-            roughness: 0.08,
-            metalness: 0.14,
-            envMapIntensity: 0.9,
+            opacity: 0.76,
+            roughness: 0.04,
+            metalness: 0.08,
+            reflectivity: 0.88,
+            envMapIntensity: 0.46,
+            clearcoat: 0.0,
             depthWrite: false,
           });
           obj.castShadow = false;
+        } else if (matName === 'AIO_BraidedHose') {
+          obj.material.envMapIntensity = 0.10;
+          obj.material.roughness = 0.96;
+        } else if (matName === 'Corsair_RX120Blade') {
+          obj.material.transparent = true;
+          obj.material.opacity = 0.88;
+          obj.material.side = THREE.DoubleSide;
+          obj.material.depthWrite = false;
+        } else if (matName === 'Corsair_TitanDomeGlass') {
+          obj.material.transparent = true;
+          obj.material.opacity = 0.34;
+          obj.material.depthWrite = false;
+        } else if (matName === 'Braided_Cable' || matName === 'Braided_CableGraphite' || matName === 'Corsair_RubberGrommet') {
+          obj.castShadow = false;
+          obj.material.envMapIntensity = 0.14;
+        } else if (matName === 'Corsair_PSUTopVent' || matName === 'Corsair_RapidRouteMatte') {
+          obj.material.envMapIntensity = 0.24;
         } else if (matName === 'RGB_Cyan' || matName === 'RGB_Mint') {
           this.pcEmissives.push({ mat: obj.material, phase: obj.position.y * 4.0 + obj.position.z * 2.0 });
-        } else if (matName === 'Corsair_AirflowGrille') {
+        } else if (matName === 'Corsair_AirflowGrille' || matName === 'Corsair_TopAirflowGrille') {
+          // Smooth hardware-antialiased alpha blending eliminates 1-bit alphaTest shimmering/aliasing on perforated steel!
           obj.material.side = THREE.DoubleSide;
-          obj.material.transparent = false;
-          obj.material.alphaTest = 0.5;
-        } else if (matName === 'Corsair_TopAirflowGrille') {
-          obj.material.side = THREE.DoubleSide;
-          obj.material.transparent = false;
+          obj.material.transparent = true;
+          obj.material.alphaTest = 0.04;
+          obj.material.depthWrite = false;
         }
       });
       pcGroup.add(pcModel);
     });
 
-    // Deep grounded contact shadow directly beneath the Corsair 5000D Airflow feet & belly (suppresses stray under-chassis glare!)
-    this._addContactShadow(pcGroup, 0, 0.0008, 0, 0.38, 0.66, 0.94);
-    this._addContactShadow(pcGroup, 0, 0.0012, 0, 0.28, 0.56, 0.96);
+    // Deep grounded contact shadow directly beneath the Corsair 5000D Airflow feet & belly + subtle cyan desk spill beside tempered glass!
+    this._addContactShadow(pcGroup, 0, 0.0007, 0, 0.40, 0.68, 0.96);
+    this._addContactShadow(pcGroup, 0, 0.0012, 0, 0.28, 0.56, 1.0);
+    const pcSpillC = document.createElement('canvas');
+    pcSpillC.width = pcSpillC.height = 128;
+    const psc = pcSpillC.getContext('2d');
+    const psg = psc.createRadialGradient(64, 64, 4, 64, 64, 64);
+    psg.addColorStop(0.0, 'rgba(92, 212, 248, 0.18)');
+    psg.addColorStop(0.5, 'rgba(72, 188, 232, 0.07)');
+    psg.addColorStop(1.0, 'rgba(64, 176, 224, 0.0)');
+    psc.fillStyle = psg;
+    psc.fillRect(0, 0, 128, 128);
+    const pcSpill = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.46, 0.58),
+      new THREE.MeshBasicMaterial({
+        map: new THREE.CanvasTexture(pcSpillC),
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    pcSpill.rotation.x = -Math.PI / 2;
+    pcSpill.position.set(-0.24, 0.0015, 0.02);
+    pcGroup.add(pcSpill);
     this.scene.add(pcGroup);
   }
 
@@ -2015,17 +2486,43 @@ export class OfficeScene {
       deskCluster.add(crsModel);
     });
 
-    // 2. Stack of 8× Champagne-Gold NVIDIA DGX Spark Machines ON THE DESK right alongside the CRS804 & monitor!
-    // Each unit gets unique UV flip/offset + subtle champagne tonal variation so ZERO two units ever look cloned!
+    // 2. Stack of 8× GB10 Nodes ON THE DESK right alongside the CRS804 & monitor:
+    //    - Bottom 2 units (indices 0, 1): Stellar Grey ASUS Ascent GX10 (asus_gx10.glb)
+    //    - Top 6 units (indices 2..7): Champagne-Gold NVIDIA DGX Spark (dgx_spark.glb) with front NVIDIA logo & per-unit varied metal foam!
     const sparkStepY = 0.0543;
     const stackX = 0.31;
     const stackZ = -1.08;
     this._addContactShadow(deskCluster, stackX, sy + 0.0008, stackZ, 0.24, 0.24, 0.90);
     this._addContactShadow(deskCluster, stackX, sy + 0.0011, stackZ, 0.175, 0.175, 0.96);
 
+    const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
+
+    // Load 2× ASUS Ascent GX10 (Stellar Grey) at the base of the 8-node stack
+    this._loadGLB('assets/models/asus_gx10.glb', (gxTemplate) => {
+      for (let i = 0; i < 2; i++) {
+        const unit = i === 0 ? gxTemplate : gxTemplate.clone(true);
+        unit.position.set(stackX, sy + i * sparkStepY, stackZ);
+        unit.traverse((obj) => {
+          if (!obj.isMesh) return;
+          obj.userData.camPreset = 'cluster';
+          this.clickableMeshes.push(obj);
+          if (obj.material?.map) {
+            obj.material.map.anisotropy = maxAniso;
+            obj.material.map.needsUpdate = true;
+          }
+          if (obj.material?.name === 'GX10_PowerLED') {
+            obj.material = obj.material.clone();
+            this.sparkLeds.push({ mat: obj.material, phase: i * 1.1 });
+          }
+        });
+        deskCluster.add(unit);
+      }
+    });
+
+    // Load 6× NVIDIA DGX Spark (Champagne Gold) stacked cleanly above the 2 ASUS Ascent GX10 units
     this._loadGLB('assets/models/dgx_spark.glb', (sparkTemplate) => {
-      for (let i = 0; i < 8; i++) {
-        const unit = i === 0 ? sparkTemplate : sparkTemplate.clone(true);
+      for (let i = 2; i < 8; i++) {
+        const unit = i === 2 ? sparkTemplate : sparkTemplate.clone(true);
         unit.position.set(stackX, sy + i * sparkStepY, stackZ);
         unit.traverse((obj) => {
           if (!obj.isMesh) return;
@@ -2033,6 +2530,10 @@ export class OfficeScene {
           this.clickableMeshes.push(obj);
           if (obj.material?.name === 'Spark_GoldTop') {
             obj.material.envMapIntensity = 0.72;
+          }
+          if (obj.material?.name === 'Spark_FrontNvidiaLogo' && obj.material.map) {
+            obj.material.map.anisotropy = maxAniso;
+            obj.material.map.needsUpdate = true;
           }
           if (obj.material?.name === 'Spark_GoldMetalFoam') {
             const m = obj.material.clone();
@@ -2345,7 +2846,7 @@ export class OfficeScene {
     if (this.lampGlowBounce) this.lampGlowBounce.intensity = m.lampBounce || 0.48;
     if (this.lampPoolMat) this.lampPoolMat.opacity = m.id === 'day' ? 0.22 : (m.id === 'twilight' ? 0.85 : 0.72);
     if (this.curtainMats) {
-      const ci = m.id === 'twilight' ? 0.06 : 0.18;
+      const ci = m.id === 'twilight' ? 0.15 : 0.20;
       for (const cm of this.curtainMats) cm.emissiveIntensity = ci;
     }
     if (this.roomBounceLight) this.roomBounceLight.intensity = m.bounceIntensity;
@@ -2409,11 +2910,19 @@ export class OfficeScene {
     const parent = this.canvas.parentElement;
     const w = Math.max(1, parent ? parent.clientWidth : window.innerWidth);
     const h = Math.max(1, parent ? parent.clientHeight : window.innerHeight);
-    this.camera.aspect = w / h;
+    const aspect = w / h;
+    this.camera.aspect = aspect;
+    // On portrait phones (aspect < 0.95), gently widen vertical FOV so the full desk & window stay comfortably framed
+    this.camera.fov = aspect < 0.95 ? Math.min(64, 41 / Math.pow(aspect, 0.42)) : 41;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
     if (this.composer) {
       this.composer.setSize(w, h);
+    }
+    if (this.bloomPass) {
+      this.bloomPass.setSize(w, h);
+      // Avoid HalfFloat odd-height mip bloom artifacts on very short landscape mobile viewports
+      this.bloomPass.enabled = h >= 440;
     }
   }
 
@@ -2449,7 +2958,7 @@ export class OfficeScene {
         item.mat.emissive.setHSL(hue, 0.78, 0.54);
       }
       if (this.pcRgbLight) {
-        this.pcRgbLight.color.setHex(0xb2e4f8);
+        this.pcRgbLight.color.setHex(0x5ad8fc);
       }
 
       for (const s of this.sparkLeds) {

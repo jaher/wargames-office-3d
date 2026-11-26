@@ -142,14 +142,41 @@ def generate_textures():
     ld = ImageDraw.Draw(lip)
     try:
         f_lip = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 62)
+        f_front_nv = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 146)
     except Exception:
-        f_lip = ImageFont.load_default()
+        f_lip = f_front_nv = ImageFont.load_default()
     ld.text((24, 8), "NVIDIA", fill=(14, 9, 3), font=f_lip)
     ld.text((570, 8), "DGX SPARK", fill=(14, 9, 3), font=f_lip)
     p_lip = os.path.join(TEX_DIR, "dgx_spark_lip.png")
     lip.save(p_lip)
 
-    return p_alb, p_nrm, p_rgh, p_top, p_top_nrm, p_lip
+    # Authentic Centered Front NVIDIA Emblem Plaque (1024x256 high-DPI brushed dark-bronze inset with crisp NVIDIA eye-claw + NVIDIA wordmark!)
+    nw, nh = 1024, 256
+    nv_img = Image.new("RGB", (nw, nh), (22, 18, 12))
+    nvd = ImageDraw.Draw(nv_img)
+    # Subtle horizontal brushed dark-bronze metallic micro-grain + machined champagne border line
+    for y in range(0, nh, 2):
+        dv = (y % 4) * 2
+        nvd.line((0, y, nw, y), fill=(22 + dv, 18 + dv, 12 + dv), width=2)
+    nvd.rounded_rectangle((6, 6, nw - 7, nh - 7), radius=20, outline=(196, 156, 84), width=8)
+    # Authentic NVIDIA eye-claw mark (left square block with split spiral eye curves in satin champagne-white)
+    eye_x0, eye_y0, eye_x1, eye_y1 = 48, 44, 248, 212
+    # Left half green-gold/champagne solid square accent + eye spiral curves
+    nvd.rounded_rectangle((eye_x0, eye_y0, eye_x0 + 104, eye_y1), radius=10, fill=(198, 162, 92))
+    # Outer eye sweep
+    nvd.arc((eye_x0 + 20, eye_y0 + 18, eye_x1 - 6, eye_y1 - 14), start=195, end=350, fill=(244, 232, 204), width=16)
+    nvd.arc((eye_x0 + 28, eye_y0 + 34, eye_x1 - 12, eye_y1 - 24), start=18, end=168, fill=(244, 232, 204), width=15)
+    # Inner spiral eye curl (cuts cleanly across the split!)
+    nvd.arc((eye_x0 + 54, eye_y0 + 50, eye_x1 - 36, eye_y1 - 44), start=195, end=355, fill=(24, 20, 14), width=15)
+    nvd.arc((eye_x0 + 72, eye_y0 + 62, eye_x1 - 52, eye_y1 - 56), start=190, end=350, fill=(244, 232, 204), width=13)
+    nvd.arc((eye_x0 + 64, eye_y0 + 68, eye_x1 - 48, eye_y1 - 52), start=20, end=165, fill=(24, 20, 14), width=13)
+    nvd.ellipse((eye_x0 + 106, eye_y0 + 76, eye_x0 + 132, eye_y0 + 100), fill=(244, 232, 204))
+    # Bold crisp NVIDIA wordmark right beside the eye-claw icon
+    nvd.text((284, nh // 2 + 4), "NVIDIA", fill=(244, 234, 210), font=f_front_nv, anchor="lm")
+    p_front_nv = os.path.join(TEX_DIR, "dgx_spark_front_nvidia.png")
+    nv_img.save(p_front_nv)
+
+    return p_alb, p_nrm, p_rgh, p_top, p_top_nrm, p_lip, p_front_nv
 
 
 def make_mat(name, color, metallic=0.92, roughness=0.24):
@@ -228,13 +255,14 @@ def add_cyl(name, r, depth, loc, rot, mat, verts=18):
 
 def build_dgx_spark():
     clear_scene()
-    p_alb, p_nrm, p_rgh, p_top, p_top_nrm, p_lip = generate_textures()
+    p_alb, p_nrm, p_rgh, p_top, p_top_nrm, p_lip, p_front_nv = generate_textures()
 
     # Precision-machined metallic champagne-gold anodized aluminum with crisp chamfered specular sheen!
     gold_alu = make_mat("Spark_GoldAluminum", (0.56, 0.42, 0.20), metallic=0.88, roughness=0.24)
     gold_cheek = make_mat("Spark_GoldCheek", (0.42, 0.30, 0.14), metallic=0.88, roughness=0.26)
     gold_top = make_tex_mat("Spark_GoldTop", p_top, p_top_nrm, None, metallic=0.72, roughness=0.26, nrm_strength=0.45)
     gold_lip = make_tex_mat("Spark_GoldLip", p_lip, metallic=0.72, roughness=0.26)
+    front_nv_mat = make_tex_mat("Spark_FrontNvidiaLogo", p_front_nv, metallic=0.42, roughness=0.34)
     gold_foam = make_tex_mat("Spark_GoldMetalFoam", p_alb, p_nrm, p_rgh, metallic=0.90, roughness=0.20, nrm_strength=2.6)
     dark_core = make_mat("Spark_DarkAnodized", (0.022, 0.024, 0.030), metallic=0.65, roughness=0.48)
     steel_port = make_mat("Spark_StainlessPort", (0.72, 0.75, 0.80), metallic=0.94, roughness=0.22)
@@ -282,7 +310,7 @@ def build_dgx_spark():
     bpy.ops.object.transform_apply(rotation=True, scale=True)
     lip_obj.data.materials.append(gold_lip)
 
-    # 2. Pure Uninterrupted Edge-to-Edge Sculpted Open-Cell Champagne-Gold Metal-Foam Front Fascia!
+    # 2. Sculpted Open-Cell Champagne-Gold Metal-Foam Front Fascia + Centered Precision-Machined NVIDIA Front Logo Badge!
     front_w = W - 16.0 * MM
     front_h = H - 9.0 * MM
     bpy.ops.mesh.primitive_plane_add(size=1.0, location=(0, -D * 0.5 + 4.8 * MM, z0 + H * 0.5))
@@ -292,6 +320,16 @@ def build_dgx_spark():
     foam.rotation_euler = (math.pi / 2, 0, 0)
     bpy.ops.object.transform_apply(rotation=True, scale=True)
     foam.data.materials.append(gold_foam)
+
+    # Flush-inset beveled champagne-gold NVIDIA badge collar + crisp high-DPI NVIDIA eye-claw & wordmark plaque dead-center on front fascia!
+    add_box("Front_NvidiaCollar", (54.0 * MM, 2.2 * MM, 13.8 * MM), (0, -D * 0.5 + 4.3 * MM, z0 + H * 0.5), gold_alu, bevel=0.8 * MM, segments=2)
+    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(0, -D * 0.5 + 3.05 * MM, z0 + H * 0.5))
+    nv_plate = bpy.context.active_object
+    nv_plate.name = "Front_NvidiaLogoPlate"
+    nv_plate.scale = (51.0 * MM, 12.2 * MM, 1.0)
+    nv_plate.rotation_euler = (math.pi / 2, 0, 0)
+    bpy.ops.object.transform_apply(rotation=True, scale=True)
+    nv_plate.data.materials.append(front_nv_mat)
 
     # 3. Rear Panel (+Y): upper gold metal-foam exhaust + complete recessed I/O bay
     bpy.ops.mesh.primitive_plane_add(size=1.0, location=(0, D * 0.5 - 4.4 * MM, z0 + H * 0.72))

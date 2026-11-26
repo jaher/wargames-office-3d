@@ -12,6 +12,8 @@ function getDom() {
     hudNowPlaying: byId('hudNowPlaying'),
     skyMoodBtn: byId('skyMoodBtn'),
     togglePanelBtn: byId('togglePanelBtn'),
+    closePanelBtn: byId('closePanelBtn'),
+    sidePanel: byId('sidePanel'),
     camButtons: [...document.querySelectorAll('.cam-btn')],
     statusBadge: byId('statusBadge'),
     familySel: byId('familySel'),
@@ -76,8 +78,10 @@ function bootstrap() {
       }
       setActiveCamButton(dom.camButtons, qsCam);
     }
-    if (qs.get('panel') === '0') {
-      dom.sidePanel = document.getElementById('sidePanel');
+    const smallViewportMq = window.matchMedia('(max-width: 960px), (max-height: 640px)');
+    const qsPanel = qs.get('panel');
+    const shouldStartCollapsed = qsPanel === '0' || (qsPanel !== '1' && smallViewportMq.matches);
+    if (shouldStartCollapsed) {
       if (dom.sidePanel) dom.sidePanel.style.transition = 'none';
       dom.app.classList.add('panel-collapsed');
       dom.togglePanelBtn.textContent = 'Show Panel';
@@ -125,8 +129,9 @@ function bootstrap() {
   });
 
   // Collapsible side panel toggle
-  const togglePanel = () => {
-    const collapsed = dom.app.classList.toggle('panel-collapsed');
+  let userToggledPanel = false;
+  const setPanelCollapsed = (collapsed) => {
+    dom.app.classList.toggle('panel-collapsed', collapsed);
     dom.togglePanelBtn.textContent = collapsed ? 'Show Panel' : 'Hide Panel';
     if (office) {
       office.resize();
@@ -134,7 +139,23 @@ function bootstrap() {
       setTimeout(() => office.resize(), 280);
     }
   };
+  const togglePanel = () => {
+    userToggledPanel = true;
+    setPanelCollapsed(!dom.app.classList.contains('panel-collapsed'));
+  };
   dom.togglePanelBtn.addEventListener('click', togglePanel);
+  if (dom.closePanelBtn) {
+    dom.closePanelBtn.addEventListener('click', () => {
+      userToggledPanel = true;
+      setPanelCollapsed(true);
+    });
+  }
+  const smallMq = window.matchMedia('(max-width: 960px), (max-height: 640px)');
+  smallMq.addEventListener('change', (ev) => {
+    if (ev.matches && !userToggledPanel) {
+      setPanelCollapsed(true);
+    }
+  });
 
   // Keyboard shortcuts: 1-5 camera presets, P toggles side panel
   window.addEventListener('keydown', (e) => {

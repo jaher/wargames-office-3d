@@ -58,7 +58,7 @@
         <button class="cam-btn active" data-cam="overview" title="Shortcut: 1">1 · Office</button>
         <button class="cam-btn" data-cam="monitor" title="Shortcut: 2">2 · Omarchy Monitor</button>
         <button class="cam-btn" data-cam="pc" title="Shortcut: 3">3 · Corsair RTX 5090</button>
-        <button class="cam-btn" data-cam="cluster" title="Shortcut: 4">4 · 8× DGX Spark + CRS804</button>
+        <button class="cam-btn" data-cam="cluster" title="Shortcut: 4">4 · 6× DGX Spark + 2× GX10 + CRS804</button>
         <button class="cam-btn" data-cam="window" title="Shortcut: 5">5 · Skyline View</button>
       </nav>
 
@@ -73,7 +73,10 @@
           <h1>OverTheWire Terminal</h1>
           <p class="panel-sub">Omarchy Linux · Live narrated replays · Passwords redacted</p>
         </div>
-        <span id="statusBadge" class="status-badge">Ready</span>
+        <div class="panel-header-actions">
+          <span id="statusBadge" class="status-badge">Ready</span>
+          <button id="closePanelBtn" class="panel-close-btn" aria-label="Close panel" title="Hide panel">✕</button>
+        </div>
       </div>
 
       <section class="selectors" aria-label="Mission and Level Selection">
