@@ -273,8 +273,8 @@ html, body {
 
 /* Side Panel */
 .side-panel {
-  width: 440px;
-  max-width: 46vw;
+  width: 376px;
+  max-width: 42vw;
   flex: 0 0 auto;
   height: 100%;
   display: flex;
@@ -368,12 +368,15 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
   font-size: 11px;
   color: var(--muted);
 }
 
 .field select,
 .speed-wrap select {
+  width: 100%;
+  min-width: 0;
   background: var(--panel-2);
   color: var(--text);
   border: 1px solid var(--border);
@@ -516,181 +519,16 @@ html, body {
   -webkit-box-orient: vertical;
 }
 
-/* Terminal Shell */
-.term-shell {
-  flex: 1 1 160px;
-  min-height: 120px;
-  display: flex;
-  flex-direction: column;
-  border-radius: 9px;
-  overflow: hidden;
-  border: 1px solid rgba(125, 207, 255, 0.22);
-  background: #090c12;
-  box-shadow: inset 0 0 36px rgba(115, 218, 202, 0.04);
-}
-
-.term-chrome {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
-  background: #131824;
-  border-bottom: 1px solid rgba(125, 207, 255, 0.14);
-}
-
-.term-dots {
-  display: flex;
-  gap: 5px;
-}
-
-.term-dots i {
-  display: block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-}
-
-.term-dots i:nth-child(1) { background: #f7768e; }
-.term-dots i:nth-child(2) { background: #e0af68; }
-.term-dots i:nth-child(3) { background: #9ece6a; }
-
-.term-title {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.term {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 10px 12px;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.52;
-  color: #c8f5d4;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
-.term .prompt {
-  color: #7dcfff;
-  font-weight: 600;
-}
-
-.term .cmd {
-  color: #f0f6ff;
-}
-
-.term .out {
-  color: #b7e8c9;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.term .out.w100 {
-  word-break: break-all;
-}
-
-.term .note {
-  color: #7f95b5;
-  font-style: italic;
-}
-
-.term .goal {
-  color: #e6f2ff;
-  border: 1px solid rgba(125, 207, 255, 0.25);
-  border-left: 3px solid var(--green);
-  background: rgba(115, 218, 202, 0.08);
-  padding: 7px 9px;
-  margin: 4px 0 9px;
-  border-radius: 4px;
-}
-
-.term .redacted {
-  color: #e0af68;
-  background: rgba(224, 175, 104, 0.14);
-  padding: 0 4px;
-  border-radius: 3px;
-  font-weight: 600;
-}
-
-.term .narr-hl {
-  outline: 1px solid var(--green);
-  background: rgba(115, 218, 202, 0.12);
-  border-radius: 3px;
-}
-
-.term .cursor {
-  display: inline-block;
-  width: 7px;
-  height: 1.05em;
-  background: var(--green);
-  vertical-align: text-bottom;
-  animation: blink 0.9s steps(1) infinite;
-}
-
-@keyframes blink {
-  50% { opacity: 0; }
-}
-
-.term .vimscreen {
-  border: 1px solid rgba(115, 218, 202, 0.3);
-  background: #06090f;
-  padding: 6px 8px;
-  margin: 6px 0;
-  border-radius: 4px;
-}
-
-.term .vimrow {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.term .vimrow .vln {
-  color: #566a87;
-}
-
-.term .vimrow .vlc {
-  color: #c8f5d4;
-}
-
-.term .vimrow.vimtilde .vlc {
-  color: #36455d;
-}
-
-.term .vimstatus {
-  background: #1b2a3c;
-  color: #d6ecff;
-  margin-top: 5px;
-  padding: 1px 6px;
-}
-
-.term .vimmode {
-  color: var(--amber);
-  font-style: italic;
-  min-height: 1.4em;
-}
-
-.term .vimcursor {
-  background: var(--green);
-  color: #06090f;
-}
-
 /* Transcript */
 .transcript-wrap {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-height: 120px;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-2);
   overflow: hidden;
-  max-height: 175px;
 }
 
 .transcript-head {
@@ -738,6 +576,7 @@ html, body {
 }
 
 .panel-footer {
+  margin-top: auto;
   font-size: 11px;
   color: var(--muted);
   text-align: center;
@@ -758,12 +597,6 @@ html, body {
   .side-panel {
     gap: 7px;
     padding: 10px 13px 10px;
-  }
-  .term-shell {
-    min-height: 105px;
-  }
-  .transcript-wrap {
-    max-height: 130px;
   }
 }
 

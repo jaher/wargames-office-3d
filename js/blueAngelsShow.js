@@ -96,6 +96,7 @@ class SmokeTrailRibbon {
       opacity: 0.78,
       depthWrite: false,
       side: THREE.DoubleSide,
+      forceSinglePass: true,
       toneMapped: true,
     });
     this.tint = new THREE.Color(0xfff4e2);

@@ -2,11 +2,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { BlueAngelsShow } from './blueAngelsShow.js';
 import { BlueAngelsAudio } from './blueAngelsAudio.js';
 import { versionedUrl } from './assetUrl.js';
@@ -299,78 +294,53 @@ function createWoodPBR({
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(repeatX, repeatY);
-    t.anisotropy = 8;
+    t.anisotropy = 4;
     return t;
   };
   return {
     map: wrap(colC, true),
     roughnessMap: wrap(rghC, false),
-    bumpMap: wrap(bmpC, false),
+    bumpMap: null,
   };
 }
 
 // Smooth, 100% seamlessly tileable architectural matte plaster (ZERO rectangular tile seams or faceted noise!)
 function createPlasterPBR(baseHex = '#ddd2c0', seed = 71) {
-  const size = 512;
+  const size = 256;
   const colC = document.createElement('canvas');
-  const bmpC = document.createElement('canvas');
-  colC.width = bmpC.width = size;
-  colC.height = bmpC.height = size;
+  colC.width = colC.height = size;
   const ctx = colC.getContext('2d');
-  const bctx = bmpC.getContext('2d');
   const rng = mulberry32(seed);
 
   ctx.fillStyle = baseHex;
   ctx.fillRect(0, 0, size, size);
-  bctx.fillStyle = 'rgb(128,128,128)';
-  bctx.fillRect(0, 0, size, size);
 
   // Ultra-soft toroidally wrapped plaster tonal clouds (drawn across all 9 wrap offsets -> ZERO tile edge seams!)
-  for (let i = 0; i < 42; i++) {
+  for (let i = 0; i < 28; i++) {
     const x = rng() * size;
     const y = rng() * size;
-    const r = 64 + rng() * 110;
+    const r = 32 + rng() * 56;
     const bright = rng() > 0.48;
     for (const ox of [-size, 0, size]) {
       for (const oy of [-size, 0, size]) {
         const cx = x + ox;
         const cy = y + oy;
         if (cx + r < 0 || cx - r > size || cy + r < 0 || cy - r > size) continue;
-        const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, r);
-        g.addColorStop(0, bright ? 'rgba(255, 248, 236, 0.032)' : 'rgba(72, 54, 40, 0.035)');
+        const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, r);
+        g.addColorStop(0, bright ? 'rgba(255, 248, 236, 0.035)' : 'rgba(72, 54, 40, 0.038)');
         g.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, size, size);
-
-        const bg = bctx.createRadialGradient(cx, cy, 4, cx, cy, r);
-        bg.addColorStop(0, bright ? 'rgba(138,138,138,0.06)' : 'rgba(118,118,118,0.06)');
-        bg.addColorStop(1, 'rgba(128,128,128,0)');
-        bctx.fillStyle = bg;
-        bctx.fillRect(0, 0, size, size);
       }
     }
   }
-
-  // Ultra-fine smooth architectural eggshell mineral finish (eliminates gritty dFdx/dFdy bump faceting!)
-  const imgCol = ctx.getImageData(0, 0, size, size);
-  for (let i = 0; i < size * size; i++) {
-    const n = (rng() - 0.5) * 3.0;
-    const idx = i * 4;
-    imgCol.data[idx] = THREE.MathUtils.clamp(imgCol.data[idx] + n, 0, 255);
-    imgCol.data[idx + 1] = THREE.MathUtils.clamp(imgCol.data[idx + 1] + n, 0, 255);
-    imgCol.data[idx + 2] = THREE.MathUtils.clamp(imgCol.data[idx + 2] + n, 0, 255);
-  }
-  ctx.putImageData(imgCol, 0, 0);
 
   const map = new THREE.CanvasTexture(colC);
   map.colorSpace = THREE.SRGBColorSpace;
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
   map.repeat.set(2, 1);
-  map.anisotropy = 8;
-  const bumpMap = new THREE.CanvasTexture(bmpC);
-  bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
-  bumpMap.repeat.set(2, 1);
-  return { map, bumpMap };
+  map.anisotropy = 4;
+  return { map, bumpMap: null };
 }
 
 function createBrushedMetalMap(seed = 33) {
@@ -390,73 +360,6 @@ function createBrushedMetalMap(seed = 33) {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(2, 2);
   return tex;
-}
-
-function createRugPBR() {
-  // High-resolution organic woven wool-boucle rug (ZERO 2px horizontal aliasing stripes!)
-  const W = 1024;
-  const H = 768;
-  const colC = document.createElement('canvas');
-  const bmpC = document.createElement('canvas');
-  colC.width = bmpC.width = W;
-  colC.height = bmpC.height = H;
-  const ctx = colC.getContext('2d');
-  const bctx = bmpC.getContext('2d');
-  const rng = mulberry32(42);
-
-  ctx.fillStyle = '#9e8d74';
-  ctx.fillRect(0, 0, W, H);
-  bctx.fillStyle = 'rgb(122,122,122)';
-  bctx.fillRect(0, 0, W, H);
-
-  // Subtle organic woven wool pile flecks & heathering (non-aliasing tactile fabric depth!)
-  for (let i = 0; i < 9500; i++) {
-    const x = rng() * W;
-    const y = rng() * H;
-    const fw = 3 + rng() * 9;
-    const fh = 2 + rng() * 5;
-    const v = rng();
-    ctx.fillStyle = v > 0.52 ? 'rgba(232,218,196,0.16)' : 'rgba(62,48,36,0.17)';
-    ctx.fillRect(x, y, fw, fh);
-    bctx.fillStyle = v > 0.52 ? 'rgba(182,182,182,0.34)' : 'rgba(72,72,72,0.34)';
-    bctx.fillRect(x, y, fw, fh);
-  }
-
-  // Soft woven architectural border & muted mid-century diamond pattern
-  ctx.strokeStyle = 'rgba(46, 42, 38, 0.30)';
-  ctx.lineWidth = 10;
-  ctx.strokeRect(36, 36, W - 72, H - 72);
-  ctx.strokeStyle = 'rgba(128, 86, 52, 0.24)';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(56, 56, W - 112, H - 112);
-
-  ctx.strokeStyle = 'rgba(54, 48, 44, 0.16)';
-  ctx.lineWidth = 5;
-  const cols = 4;
-  const rows = 3;
-  const cw = (W - 148) / cols;
-  const ch = (H - 148) / rows;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const cx = 74 + (c + 0.5) * cw;
-      const cy = 74 + (r + 0.5) * ch;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - ch * 0.42);
-      ctx.lineTo(cx + cw * 0.42, cy);
-      ctx.lineTo(cx, cy + ch * 0.42);
-      ctx.lineTo(cx - cw * 0.42, cy);
-      ctx.closePath();
-      ctx.stroke();
-    }
-  }
-
-  const map = new THREE.CanvasTexture(colC);
-  map.colorSpace = THREE.SRGBColorSpace;
-  map.anisotropy = 16;
-  map.minFilter = THREE.LinearMipmapLinearFilter;
-  const bumpMap = new THREE.CanvasTexture(bmpC);
-  bumpMap.anisotropy = 8;
-  return { map, bumpMap };
 }
 
 function createContactShadowTexture() {
@@ -590,9 +493,7 @@ function createSnakePlantLeafPBR() {
   const map = new THREE.CanvasTexture(c);
   map.colorSpace = THREE.SRGBColorSpace;
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
-  const bumpMap = new THREE.CanvasTexture(b);
-  bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
-  return { map, bumpMap };
+  return { map, bumpMap: null };
 }
 
 // High-detail botanical Fiddle-Leaf Fig leaf venation, organic color variation & micro-relief bump texture
@@ -660,8 +561,7 @@ function createFigLeafPBR() {
   }
   const map = new THREE.CanvasTexture(c);
   map.colorSpace = THREE.SRGBColorSpace;
-  const bumpMap = new THREE.CanvasTexture(b);
-  return { map, bumpMap };
+  return { map, bumpMap: null };
 }
 
 function createWindowGlassReflectionTexture() {
@@ -1029,7 +929,7 @@ export class OfficeScene {
     this.texLoader = new THREE.TextureLoader();
     this._glbQueue = [];
     this._glbInFlight = 0;
-    this._glbMaxConcurrent = 6;
+    this._glbMaxConcurrent = 10;
     this._assetStats = { total: 0, loaded: [], failed: [], pending: 0 };
     this._assetProgressCbs = [];
     this._assetReadyResolvers = [];
@@ -1052,10 +952,7 @@ export class OfficeScene {
     this.clickableMeshes = [];
     this.dustPoints = null;
 
-    RectAreaLightUniformsLib.init();
-
     this._initRendererAndCamera();
-    this._initPostProcessing();
     this._buildSkyAndCityView();
     this._buildRoomShell();
     this._buildLighting();
@@ -1080,15 +977,15 @@ export class OfficeScene {
       antialias: true,
       powerPreference: 'high-performance',
     });
+    this.renderer.debug.checkShaderErrors = false;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-    this.pmremGenerator.compileEquirectangularShader();
 
     const w = this.canvas.clientWidth || window.innerWidth;
     const h = this.canvas.clientHeight || window.innerHeight;
@@ -1107,27 +1004,6 @@ export class OfficeScene {
     this.camera.position.set(...p.pos);
     this.controls.target.set(...p.target);
     this.controls.update();
-  }
-
-  _initPostProcessing() {
-    try {
-      const w = Math.max(1, this.canvas.clientWidth || window.innerWidth);
-      const h = Math.max(1, this.canvas.clientHeight || window.innerHeight);
-      const isWebGL2 = this.renderer.capabilities.isWebGL2;
-      const samples = isWebGL2 ? Math.min(4, this.renderer.capabilities.maxSamples || 0) : 0;
-      const rt = new THREE.WebGLRenderTarget(w, h, {
-        type: THREE.HalfFloatType,
-        samples,
-      });
-      this.composer = new EffectComposer(this.renderer, rt);
-      this.composer.addPass(new RenderPass(this.scene, this.camera));
-      // Restrained photographic bloom (soft halation on warm lamp & RGB accents without specular blowout!)
-      this.bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.11, 0.42, 1.40);
-      this.composer.addPass(this.bloomPass);
-      this.composer.addPass(new OutputPass());
-    } catch {
-      this.composer = null;
-    }
   }
 
   _notifyAssetProgress(lastUrl = '') {
@@ -1170,96 +1046,182 @@ export class OfficeScene {
       const job = this._glbQueue.shift();
       this._glbInFlight++;
       const reqUrl = versionedUrl(job.url, job.attempt > 0 ? { retry: job.attempt } : null);
+      const isEnclosedPC = job.url.includes('corsair_rtx5090');
+      let settled = false;
+      const onFail = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this._glbInFlight = Math.max(0, this._glbInFlight - 1);
+        if (job.attempt < job.retries) {
+          job.attempt++;
+          const delay = 350 * Math.pow(2, job.attempt - 1);
+          setTimeout(() => {
+            this._glbQueue.push(job);
+            this._drainGLBQueue();
+          }, delay);
+        } else {
+          this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
+          this._assetStats.failed.push(job.url);
+          console.warn(`Failed to load GLB ${job.url} after ${job.retries} retries:`, err);
+          this._notifyAssetProgress(job.url);
+          this._drainGLBQueue();
+        }
+      };
+      const timer = setTimeout(() => onFail(new Error(`Timeout loading ${job.url}`)), 15000);
       this.gltfLoader.load(
         reqUrl,
         (gltf) => {
-          this._glbInFlight--;
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          this._glbInFlight = Math.max(0, this._glbInFlight - 1);
           this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
           this._assetStats.loaded.push(job.url);
-          const root = gltf.scene;
-          root.traverse((obj) => {
-            if (obj.isMesh) {
-              obj.castShadow = true;
-              obj.receiveShadow = true;
-              if (obj.material && obj.material.isMeshStandardMaterial && obj.material.metalness >= 0.55) {
-                obj.material.envMapIntensity = 1.48;
+          try {
+            const root = gltf.scene;
+            const tmpSize = new THREE.Vector3();
+            const needsDoubleSide = /window_curtain|fiddle_fig|snake_plant/.test(job.url);
+            root.traverse((obj) => {
+              if (obj.isMesh) {
+                if (obj.geometry && !obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+                const bb = obj.geometry?.boundingBox;
+                const maxDim = bb ? bb.getSize(tmpSize).length() : 0.2;
+                // Only silhouette-scale meshes cast shadows (skips hundreds of tiny bolts/LEDs/interior PC parts!)
+                obj.castShadow = isEnclosedPC ? maxDim >= 0.22 : maxDim >= 0.065;
+                obj.receiveShadow = true;
+                // Downgrade GLB KHR_materials_clearcoat MeshPhysicalMaterial to fast MeshStandardMaterial
+                // (eliminates slow physical-clearcoat shader family compilations on first render!)
+                if (obj.material && obj.material.isMeshPhysicalMaterial) {
+                  const pm = obj.material;
+                  const sm = new THREE.MeshStandardMaterial({
+                    name: pm.name,
+                    color: pm.color,
+                    map: pm.map,
+                    roughness: pm.roughness,
+                    metalness: pm.metalness,
+                    roughnessMap: pm.roughnessMap,
+                    metalnessMap: pm.metalnessMap,
+                    normalMap: pm.normalMap,
+                    normalScale: pm.normalScale,
+                    aoMap: pm.aoMap,
+                    aoMapIntensity: pm.aoMapIntensity,
+                    emissive: pm.emissive,
+                    emissiveMap: pm.emissiveMap,
+                    emissiveIntensity: pm.emissiveIntensity,
+                    transparent: pm.transparent,
+                    opacity: pm.opacity,
+                    alphaTest: pm.alphaTest,
+                    side: pm.side,
+                  });
+                  pm.dispose();
+                  obj.material = sm;
+                }
+                if (obj.material) {
+                  // Solid closed GLB meshes don't need DoubleSide — collapsing them to FrontSide merges shader permutations & enables backface culling!
+                  if (!needsDoubleSide) {
+                    obj.material.side = THREE.FrontSide;
+                  }
+                  // Prevent Three.js r170 from compiling 2 separate BackSide+FrontSide shader programs for every transparent mesh!
+                  obj.material.forceSinglePass = true;
+                  if (obj.material.isMeshStandardMaterial && obj.material.metalness >= 0.55) {
+                    obj.material.envMapIntensity = 1.48;
+                  }
+                }
               }
-            }
-          });
-          job.onLoaded(root);
+            });
+            job.onLoaded(root);
+            // Ensure any materials replaced inside onLoaded also keep single-pass transparency
+            root.traverse((obj) => {
+              if (obj.isMesh && obj.material && obj.material.transparent) {
+                obj.material.forceSinglePass = true;
+              }
+            });
+          } catch (cbErr) {
+            console.warn(`Error processing GLB ${job.url}:`, cbErr);
+          }
           this._notifyAssetProgress(job.url);
           this._drainGLBQueue();
         },
         undefined,
-        (err) => {
-          this._glbInFlight--;
-          if (job.attempt < job.retries) {
-            job.attempt++;
-            const delay = 350 * Math.pow(2, job.attempt - 1);
-            setTimeout(() => {
-              this._glbQueue.push(job);
-              this._drainGLBQueue();
-            }, delay);
-          } else {
-            this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
-            this._assetStats.failed.push(job.url);
-            console.warn(`Failed to load GLB ${job.url} after ${job.retries} retries:`, err);
-            this._notifyAssetProgress(job.url);
-            this._drainGLBQueue();
-          }
-        }
+        onFail
       );
     }
   }
 
-  _loadSkylineTexture(mood, attempt = 0) {
+  _loadSkylineTexture(mood, attempt = 0, trackInPreamble = true) {
     const reqUrl = versionedUrl(mood.skylineUrl, attempt > 0 ? { retry: attempt } : null);
-    if (attempt === 0) {
+    if (trackInPreamble && attempt === 0) {
       this._assetStats.total++;
       this._assetStats.pending++;
     }
+    let settled = false;
+    const onFail = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (attempt < 3) {
+        setTimeout(() => this._loadSkylineTexture(mood, attempt + 1, trackInPreamble), 350 * Math.pow(2, attempt));
+      } else {
+        if (trackInPreamble) {
+          this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
+          this._assetStats.failed.push(mood.skylineUrl);
+          this._notifyAssetProgress(mood.skylineUrl);
+        }
+        console.warn(`Failed to load skyline texture ${mood.skylineUrl}:`, err);
+      }
+    };
+    const timer = setTimeout(() => onFail(new Error(`Timeout loading ${mood.skylineUrl}`)), 15000);
     const tex = this.texLoader.load(
       reqUrl,
       (loadedTex) => {
-        loadedTex.colorSpace = THREE.SRGBColorSpace;
-        loadedTex.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
-        loadedTex.minFilter = THREE.LinearMipmapLinearFilter;
-        loadedTex.magFilter = THREE.LinearFilter;
-        loadedTex.wrapS = THREE.MirroredRepeatWrapping;
-        loadedTex.wrapT = THREE.ClampToEdgeWrapping;
-        loadedTex.repeat.set(1.98, 1.0);
-        loadedTex.offset.set(-0.49, 0.0);
-        loadedTex.needsUpdate = true;
-        this.skylineTextures[mood.id] = loadedTex;
-        this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
-        this._assetStats.loaded.push(mood.skylineUrl);
-        if (this.skylineMat && SKY_MOODS[this.moodIndex]?.id === mood.id) {
-          this.skylineMat.map = loadedTex;
-          this.skylineMat.opacity = 1.0;
-          this.skylineMat.transparent = false;
-          this.skylineMat.needsUpdate = true;
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try {
+          loadedTex.colorSpace = THREE.SRGBColorSpace;
+          loadedTex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+          loadedTex.minFilter = THREE.LinearMipmapLinearFilter;
+          loadedTex.magFilter = THREE.LinearFilter;
+          loadedTex.wrapS = THREE.MirroredRepeatWrapping;
+          loadedTex.wrapT = THREE.ClampToEdgeWrapping;
+          loadedTex.repeat.set(1.98, 1.0);
+          loadedTex.offset.set(-0.49, 0.0);
+          loadedTex.needsUpdate = true;
+          this.skylineTextures[mood.id] = loadedTex;
+          if (this.skylineMat && SKY_MOODS[this.moodIndex]?.id === mood.id) {
+            this.skylineMat.map = loadedTex;
+            this.skylineMat.opacity = 1.0;
+            this.skylineMat.transparent = false;
+            this.skylineMat.needsUpdate = true;
+          }
+        } catch (cbErr) {
+          console.warn(`Error applying skyline texture ${mood.skylineUrl}:`, cbErr);
         }
-        this._notifyAssetProgress(mood.skylineUrl);
-      },
-      undefined,
-      (err) => {
-        if (attempt < 3) {
-          setTimeout(() => this._loadSkylineTexture(mood, attempt + 1), 350 * Math.pow(2, attempt));
-        } else {
+        if (trackInPreamble) {
           this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
-          this._assetStats.failed.push(mood.skylineUrl);
-          console.warn(`Failed to load skyline texture ${mood.skylineUrl}:`, err);
+          this._assetStats.loaded.push(mood.skylineUrl);
           this._notifyAssetProgress(mood.skylineUrl);
         }
-      }
+      },
+      undefined,
+      onFail
     );
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
+    tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     tex.wrapS = THREE.MirroredRepeatWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.repeat.set(1.98, 1.0);
     tex.offset.set(-0.49, 0.0);
     return tex;
+  }
+
+  preloadSecondarySkylines() {
+    for (const mood of SKY_MOODS) {
+      if (!this.skylineTextures[mood.id]) {
+        this.skylineTextures[mood.id] = this._loadSkylineTexture(mood, 0, false);
+      }
+    }
   }
 
   _loadTrackedTexture(url, onReady, attempt = 0) {
@@ -1268,30 +1230,43 @@ export class OfficeScene {
       this._assetStats.total++;
       this._assetStats.pending++;
     }
+    let settled = false;
+    const onFail = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (attempt < 3) {
+        setTimeout(() => this._loadTrackedTexture(url, onReady, attempt + 1), 350 * Math.pow(2, attempt));
+      } else {
+        this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
+        this._assetStats.failed.push(url);
+        console.warn(`Failed to load texture ${url}:`, err);
+        this._notifyAssetProgress(url);
+      }
+    };
+    const timer = setTimeout(() => onFail(new Error(`Timeout loading ${url}`)), 15000);
     const tex = this.texLoader.load(
       reqUrl,
       (loadedTex) => {
-        loadedTex.colorSpace = THREE.SRGBColorSpace;
-        loadedTex.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
-        loadedTex.minFilter = THREE.LinearMipmapLinearFilter;
-        loadedTex.magFilter = THREE.LinearFilter;
-        loadedTex.needsUpdate = true;
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try {
+          loadedTex.colorSpace = THREE.SRGBColorSpace;
+          loadedTex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+          loadedTex.minFilter = THREE.LinearMipmapLinearFilter;
+          loadedTex.magFilter = THREE.LinearFilter;
+          loadedTex.needsUpdate = true;
+          if (onReady) onReady(loadedTex);
+        } catch (cbErr) {
+          console.warn(`Error applying texture ${url}:`, cbErr);
+        }
         this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
         this._assetStats.loaded.push(url);
-        if (onReady) onReady(loadedTex);
         this._notifyAssetProgress(url);
       },
       undefined,
-      (err) => {
-        if (attempt < 3) {
-          setTimeout(() => this._loadTrackedTexture(url, onReady, attempt + 1), 350 * Math.pow(2, attempt));
-        } else {
-          this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
-          this._assetStats.failed.push(url);
-          console.warn(`Failed to load texture ${url}:`, err);
-          this._notifyAssetProgress(url);
-        }
-      }
+      onFail
     );
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
@@ -1448,10 +1423,9 @@ export class OfficeScene {
     });
     this.scene.add(new THREE.Mesh(new THREE.SphereGeometry(180, 32, 20), skyMat));
 
-    // Preload all 3 ultra-photorealistic 16th-floor panoramic city vistas with retry protection
-    for (const mood of SKY_MOODS) {
-      this.skylineTextures[mood.id] = this._loadSkylineTexture(mood);
-    }
+    // Load the active Golden Hour skyline upfront; secondary moods preload asynchronously right after reveal
+    const initMood = SKY_MOODS[this.moodIndex] || SKY_MOODS[0];
+    this.skylineTextures[initMood.id] = this._loadSkylineTexture(initMood, 0, true);
 
     // Wide 207° curved panoramic photographic cyclorama so even extreme left/right room orbit angles
     // never expose a vertical cutoff edge outside the window (MirroredRepeatWrapping keeps Bay Bridge centered!)
@@ -1528,7 +1502,7 @@ export class OfficeScene {
       repeatX: 2.0,
       repeatY: 2.2,
       roughBase: 196,
-      size: 1024,
+      size: 512,
     });
     const floorMat = new THREE.MeshStandardMaterial({
       map: floorPBR.map,
@@ -1545,12 +1519,9 @@ export class OfficeScene {
     floor.receiveShadow = true;
     this.scene.add(floor);
 
-    // Authentic Antique Hand-Knotted Persian Kashan/Tabriz Wool Rug (3.38 x 2.38 m) with woven knot pile bump & cotton fringe!
-    const rugPBR = createRugPBR();
+    // Authentic Antique Hand-Knotted Persian Kashan/Tabriz Wool Rug (3.38 x 2.38 m) with woven knot pile & cotton fringe!
     const rugBackingMat = new THREE.MeshStandardMaterial({
       color: 0x3a1c1a,
-      bumpMap: rugPBR.bumpMap,
-      bumpScale: 0.008,
       roughness: 0.94,
       metalness: 0.0,
       envMapIntensity: 0.12,
@@ -1562,8 +1533,6 @@ export class OfficeScene {
 
     const persianMat = new THREE.MeshStandardMaterial({
       color: 0xebe4da,
-      bumpMap: rugPBR.bumpMap,
-      bumpScale: 0.009,
       roughness: 0.93,
       metalness: 0.0,
       envMapIntensity: 0.14,
@@ -1600,11 +1569,11 @@ export class OfficeScene {
     fringeTex.colorSpace = THREE.SRGBColorSpace;
     const fringeMat = new THREE.MeshStandardMaterial({
       map: fringeTex,
-      transparent: true,
+      transparent: false,
       alphaTest: 0.12,
       roughness: 0.95,
       metalness: 0.0,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
     });
     for (const side of [-1, 1]) {
       const fringe = new THREE.Mesh(new THREE.PlaneGeometry(0.068, 2.34), fringeMat);
@@ -1616,12 +1585,10 @@ export class OfficeScene {
     }
     this._addContactShadow(this.scene, -0.14, 0.0014, -0.35, 3.56, 2.54, 0.54);
 
-    // Silky-smooth matte architectural plaster walls (subdivided planes + subtle seamless finish -> ZERO triangle facets or tile seams!)
+    // Silky-smooth matte architectural plaster walls (flat smooth plaster without dFdx/dFdy bump faceting -> ZERO triangle edges!)
     const wallPBR = createPlasterPBR('#dfd3c0', 71);
     const wallMat = new THREE.MeshStandardMaterial({
       map: wallPBR.map,
-      bumpMap: wallPBR.bumpMap,
-      bumpScale: 0.0018,
       roughness: 0.94,
       metalness: 0.0,
       envMapIntensity: 0.16,
@@ -1654,8 +1621,6 @@ export class OfficeScene {
     // Back wall framing the panoramic window aperture (strictly non-overlapping with side walls, floor, ceiling & outer mullions -> ZERO Z-fighting!)
     const winWallMat = new THREE.MeshStandardMaterial({
       map: wallPBR.map,
-      bumpMap: wallPBR.bumpMap,
-      bumpScale: 0.0015,
       color: 0xd8cab6,
       roughness: 0.94,
       metalness: 0.0,
@@ -1915,7 +1880,7 @@ export class OfficeScene {
     this.sunLight.position.set(-3.2, 3.0, -13.5);
     this.sunLight.target.position.set(0.05, 0.72, -0.75);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.set(2048, 2048);
+    this.sunLight.shadow.mapSize.set(1024, 1024);
     this.sunLight.shadow.camera.near = 4;
     this.sunLight.shadow.camera.far = 20;
     this.sunLight.shadow.camera.left = -2.6;
@@ -1927,23 +1892,19 @@ export class OfficeScene {
     this.scene.add(this.sunLight);
     this.scene.add(this.sunLight.target);
 
-    this.windowPortalLight = new THREE.RectAreaLight(0xffd5aa, 1.40, 4.4, 2.1);
-    this.windowPortalLight.position.set(-0.15, 1.7, -2.52);
-    this.windowPortalLight.lookAt(-0.15, 1.35, 1.0);
+    // Lightweight shadowless directional window sky portal
+    // (eliminates heavy RectAreaLight LTC matrix GLSL & cuts fragment light count -> much faster shader compile!)
+    this.windowPortalLight = new THREE.DirectionalLight(0xffd5aa, 0.45);
+    this.windowPortalLight.position.set(-0.15, 2.1, -4.2);
+    this.windowPortalLight.target.position.set(-0.15, 1.0, 0.8);
     this.scene.add(this.windowPortalLight);
+    this.scene.add(this.windowPortalLight.target);
 
-    this.pendantAreaLight = new THREE.RectAreaLight(0xffd59c, 0.90, 1.34, 0.12);
-    this.pendantAreaLight.position.set(-0.35, 2.43, -0.95);
-    this.pendantAreaLight.lookAt(-0.35, 0.75, -0.95);
-    this.scene.add(this.pendantAreaLight);
-
-    // Warm Golden Anglepoise Lamp Pool aimed cleanly over books & mug (shielded from monitor!)
+    // Warm Golden Anglepoise Lamp Pool aimed cleanly over books & mug (shadowless; desk props use crisp contact AO!)
     this.deskLampLight = new THREE.SpotLight(0xffa438, 12.2, 1.05, Math.PI * 0.36, 0.86, 1.8);
     this.deskLampLight.position.set(-1.14, 1.15, -0.94);
     this.deskLampLight.target.position.set(-1.16, 0.77, -0.72);
-    this.deskLampLight.castShadow = true;
-    this.deskLampLight.shadow.mapSize.set(1024, 1024);
-    this.deskLampLight.shadow.bias = -0.0004;
+    this.deskLampLight.castShadow = false;
     this.scene.add(this.deskLampLight);
     this.scene.add(this.deskLampLight.target);
 
@@ -1952,54 +1913,23 @@ export class OfficeScene {
     this.lampGlowBounce.position.set(-1.12, 1.08, -0.90);
     this.scene.add(this.lampGlowBounce);
 
-    // Live warm interior room bounce fill
-    this.roomBounceLight = new THREE.PointLight(0xffcf94, 0.72, 7.5, 1.4);
-    this.roomBounceLight.position.set(-0.2, 2.15, 0.45);
+    // Live warm interior room & pendant bounce fill (consolidates pendant, room bounce & chair rim fill into 1 light!)
+    this.roomBounceLight = new THREE.PointLight(0xffd298, 1.45, 8.5, 1.35);
+    this.roomBounceLight.position.set(-0.25, 2.25, 0.15);
     this.scene.add(this.roomBounceLight);
 
-    // Subtle cool Omarchy monitor bounce onto keyboard
-    this.screenGlowLight = new THREE.PointLight(0x7aa2f7, 0.24, 1.4, 2.0);
-    this.screenGlowLight.position.set(-0.62, 1.10, -0.90);
-    this.scene.add(this.screenGlowLight);
-
-    // Raking warm-neutral front-left key light over CRS804 & 8× DGX Spark (casts real cable shadows WITHOUT clipping Unit 8 top face!)
+    // Raking warm-neutral front-left key light over CRS804 & 8× DGX Spark (shadowless -> cuts 2 extra shadow maps!)
     this.clusterKeyLight = new THREE.SpotLight(0xffe6c4, 1.12, 2.8, Math.PI * 0.42, 0.82, 1.6);
     this.clusterKeyLight.position.set(-0.26, 1.56, 0.22);
     this.clusterKeyLight.target.position.set(0.18, 0.90, -1.06);
-    this.clusterKeyLight.castShadow = true;
-    this.clusterKeyLight.shadow.mapSize.set(1024, 1024);
-    this.clusterKeyLight.shadow.bias = -0.0003;
-    this.clusterKeyLight.shadow.normalBias = 0.008;
+    this.clusterKeyLight.castShadow = false;
     this.scene.add(this.clusterKeyLight);
     this.scene.add(this.clusterKeyLight.target);
 
-    // Warm front-right grazing fill revealing the Corsair 5000D Airflow front triangular mesh, snake plant & poster
-    this.rightFillLight = new THREE.PointLight(0xffe2be, 1.15, 3.8, 1.7);
-    this.rightFillLight.position.set(1.56, 1.34, -0.26);
+    // Warm front-right grazing fill revealing the Corsair 5000D Airflow front mesh, snake plant & poster
+    this.rightFillLight = new THREE.PointLight(0xffe0ba, 1.32, 4.4, 1.6);
+    this.rightFillLight.position.set(1.68, 1.46, -0.45);
     this.scene.add(this.rightFillLight);
-
-    // Warm gallery wall-wash near right wall illuminating the cobalt SIGNAL + NOISE print & Venetian plaster naturally!
-    this.posterAccentLight = new THREE.PointLight(0xffcb8c, 0.42, 2.8, 1.6);
-    this.posterAccentLight.position.set(2.34, 1.98, -1.86);
-    this.scene.add(this.posterAccentLight);
-
-    // Subtle foreground chair-back warm/cool fill so Herman Miller Aeron translucent Pellicle mesh weave reads cleanly!
-    this.chairRimLight = new THREE.PointLight(0xd8c6b0, 0.38, 2.2, 1.6);
-    this.chairRimLight.position.set(-1.35, 1.05, 1.15);
-    this.scene.add(this.chairRimLight);
-
-    // Restrained localized cyan-teal RGB bounce inside the Corsair 5000D (preserves rich dark contrast & metallic shadow depth!)
-    this.pcRgbLight = new THREE.PointLight(0x66d4f8, 0.16, 0.50, 2.2);
-    this.pcRgbLight.position.set(0.86, 1.24, -0.98);
-    this.scene.add(this.pcRgbLight);
-    // Subtle front-intake cyan bounce light inside the 3x front RX120 fans
-    this.pcFrontRgbBounce = new THREE.PointLight(0x52ccf4, 0.14, 0.40, 2.1);
-    this.pcFrontRgbBounce.position.set(0.96, 1.09, -0.80);
-    this.scene.add(this.pcFrontRgbBounce);
-    // Clean neutral lower-motherboard/M.2 interior fill strictly capped ABOVE the desk surface (illuminates MP600 CORE XT R2 & chipset!)
-    this.pcLowerFill = new THREE.PointLight(0xdce8f6, 0.28, 0.34, 1.9);
-    this.pcLowerFill.position.set(0.76, 0.96, -0.95);
-    this.scene.add(this.pcLowerFill);
   }
 
   // ---------- 4. Bookshelf, Books, Framed Art & Plants ----------
@@ -2054,164 +1984,221 @@ export class OfficeScene {
       shelfGroup.add(board);
     }
 
-    // Curated CS & Springer Mathematics Bookshelf (Knuth TAOCP, Architecture, OS, Springer GTM/UTM/SUMS, Systems)
-    const createBookSpineTexture = (spec) => {
-      const c = document.createElement('canvas');
-      c.width = 128;
-      c.height = 512;
-      const ctx = c.getContext('2d');
-      const W = c.width;
-      const H = c.height;
+    // Curated CS & Springer Mathematics Bookshelf packed into ONE single GPU spine texture atlas
+    // (slashes ~100 GPU texture uploads & ~200 materials down to 1 atlas + cached board colors!)
+    const ATLAS_COLS = 16;
+    const ATLAS_ROWS = 8;
+    const CELL_W = 64;
+    const CELL_H = 192;
+    const atlasC = document.createElement('canvas');
+    atlasC.width = ATLAS_COLS * CELL_W;
+    atlasC.height = ATLAS_ROWS * CELL_H;
+    const actx = atlasC.getContext('2d');
+    let nextAtlasSlot = 0;
 
-      // Base cloth/hardcover color with subtle vertical spine shading & linen grain
-      const grad = ctx.createLinearGradient(0, 0, W, 0);
+    const drawBookSpineIntoAtlas = (spec) => {
+      const slot = nextAtlasSlot++;
+      const col = slot % ATLAS_COLS;
+      const row = Math.floor(slot / ATLAS_COLS);
+      const ox = col * CELL_W;
+      const oy = row * CELL_H;
+      const W = 128;
+      const H = 512;
+
+      actx.save();
+      actx.beginPath();
+      actx.rect(ox, oy, CELL_W, CELL_H);
+      actx.clip();
+      actx.translate(ox, oy);
+      actx.scale(CELL_W / W, CELL_H / H);
+
+      const grad = actx.createLinearGradient(0, 0, W, 0);
       grad.addColorStop(0.0, 'rgba(0,0,0,0.22)');
       grad.addColorStop(0.14, 'rgba(255,255,255,0.06)');
       grad.addColorStop(0.5, 'rgba(255,255,255,0.0)');
       grad.addColorStop(0.86, 'rgba(0,0,0,0.08)');
       grad.addColorStop(1.0, 'rgba(0,0,0,0.28)');
 
-      ctx.fillStyle = spec.bg;
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
-
-      // Subtle cloth weave speckles
-      ctx.fillStyle = 'rgba(255,255,255,0.03)';
-      for (let y = 0; y < H; y += 6) {
-        ctx.fillRect(0, y, W, 1);
-      }
+      actx.fillStyle = spec.bg;
+      actx.fillRect(0, 0, W, H);
+      actx.fillStyle = grad;
+      actx.fillRect(0, 0, W, H);
 
       const style = spec.style || 'classic';
       if (style === 'gtm') {
-        // Iconic Springer GTM: bright yellow spine + signature white top series band + black typography!
-        ctx.fillStyle = '#f8f8f5';
-        ctx.fillRect(0, 18, W, 72);
-        ctx.fillStyle = '#181a1f';
-        ctx.fillRect(0, 18, W, 3);
-        ctx.fillRect(0, 88, W, 3);
-        ctx.font = '700 18px "Inter", "DejaVu Sans", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('GTM', W / 2, 46);
-        ctx.font = '700 26px "Inter", "DejaVu Sans", sans-serif';
-        ctx.fillText(spec.vol || '', W / 2, 76);
-
-        // Springer bottom band
-        ctx.fillStyle = '#181a1f';
-        ctx.fillRect(10, H - 56, W - 20, 2);
-        ctx.font = '700 16px "Georgia", serif';
-        ctx.fillText('Springer', W / 2, H - 28);
+        actx.fillStyle = '#f8f8f5';
+        actx.fillRect(0, 18, W, 72);
+        actx.fillStyle = '#181a1f';
+        actx.fillRect(0, 18, W, 3);
+        actx.fillRect(0, 88, W, 3);
+        actx.font = '700 18px "Inter", "DejaVu Sans", sans-serif';
+        actx.textAlign = 'center';
+        actx.fillText('GTM', W / 2, 46);
+        actx.font = '700 26px "Inter", "DejaVu Sans", sans-serif';
+        actx.fillText(spec.vol || '', W / 2, 76);
+        actx.fillStyle = '#181a1f';
+        actx.fillRect(10, H - 56, W - 20, 2);
+        actx.font = '700 16px "Georgia", serif';
+        actx.fillText('Springer', W / 2, H - 28);
       } else if (style === 'utm') {
-        // Classic Springer UTM: crisp white spine + yellow/blue top accent band!
-        ctx.fillStyle = '#f2c828';
-        ctx.fillRect(0, 16, W, 56);
-        ctx.fillStyle = '#15325c';
-        ctx.fillRect(0, 72, W, 6);
-        ctx.font = '700 22px "Inter", "DejaVu Sans", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('UTM', W / 2, 52);
-
-        ctx.fillStyle = '#15325c';
-        ctx.fillRect(10, H - 56, W - 20, 2);
-        ctx.font = '700 16px "Georgia", serif';
-        ctx.fillText('Springer', W / 2, H - 28);
+        actx.fillStyle = '#f2c828';
+        actx.fillRect(0, 16, W, 56);
+        actx.fillStyle = '#15325c';
+        actx.fillRect(0, 72, W, 6);
+        actx.font = '700 22px "Inter", "DejaVu Sans", sans-serif';
+        actx.textAlign = 'center';
+        actx.fillText('UTM', W / 2, 52);
+        actx.fillStyle = '#15325c';
+        actx.fillRect(10, H - 56, W - 20, 2);
+        actx.font = '700 16px "Georgia", serif';
+        actx.fillText('Springer', W / 2, H - 28);
       } else if (style === 'sums') {
-        // Classic Springer SUMS: rich royal blue spine + crisp white top block + Springer mark!
-        ctx.fillStyle = '#f6f7fa';
-        ctx.fillRect(0, 16, W, 62);
-        ctx.fillStyle = '#194d8c';
-        ctx.font = '700 22px "Inter", "DejaVu Sans", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('SUMS', W / 2, 54);
-
-        ctx.fillStyle = '#f6f7fa';
-        ctx.fillRect(10, H - 56, W - 20, 2);
-        ctx.font = '700 16px "Georgia", serif';
-        ctx.fillText('Springer', W / 2, H - 28);
+        actx.fillStyle = '#f6f7fa';
+        actx.fillRect(0, 16, W, 62);
+        actx.fillStyle = '#194d8c';
+        actx.font = '700 22px "Inter", "DejaVu Sans", sans-serif';
+        actx.textAlign = 'center';
+        actx.fillText('SUMS', W / 2, 54);
+        actx.fillStyle = '#f6f7fa';
+        actx.fillRect(10, H - 56, W - 20, 2);
+        actx.font = '700 16px "Georgia", serif';
+        actx.fillText('Springer', W / 2, H - 28);
       } else if (style === 'knuth') {
-        // Iconic Addison-Wesley Knuth TAOCP: matte black cloth + double gold bands + crisp gold serif lettering!
-        ctx.fillStyle = '#d8b24c';
-        ctx.fillRect(8, 22, W - 16, 4);
-        ctx.fillRect(8, 30, W - 16, 2);
-        ctx.fillRect(8, 96, W - 16, 2);
-        ctx.fillRect(8, H - 72, W - 16, 2);
-        ctx.fillRect(8, H - 30, W - 16, 4);
-        ctx.textAlign = 'center';
-        ctx.font = '700 22px "Georgia", serif';
-        ctx.fillText(spec.vol || 'VOL. 1', W / 2, 68, W - 14);
-        ctx.font = '600 14px "Georgia", serif';
-        ctx.fillText('ADDISON-WESLEY', W / 2, H - 46, W - 14);
+        actx.fillStyle = '#d8b24c';
+        actx.fillRect(8, 22, W - 16, 4);
+        actx.fillRect(8, 30, W - 16, 2);
+        actx.fillRect(8, 96, W - 16, 2);
+        actx.fillRect(8, H - 72, W - 16, 2);
+        actx.fillRect(8, H - 30, W - 16, 4);
+        actx.textAlign = 'center';
+        actx.font = '700 22px "Georgia", serif';
+        actx.fillText(spec.vol || 'VOL. 1', W / 2, 68, W - 14);
+        actx.font = '600 14px "Georgia", serif';
+        actx.fillText('ADDISON-WESLEY', W / 2, H - 46, W - 14);
       } else {
-        // Classic CS Textbook (top/bottom color bands + publisher footer)
         if (spec.band) {
-          ctx.fillStyle = spec.band;
-          ctx.fillRect(0, 20, W, 44);
-          ctx.fillRect(0, H - 56, W, 18);
+          actx.fillStyle = spec.band;
+          actx.fillRect(0, 20, W, 44);
+          actx.fillRect(0, H - 56, W, 18);
         }
         if (spec.vol) {
-          ctx.fillStyle = spec.bandFg || spec.fg || '#f4f0e6';
-          ctx.textAlign = 'center';
-          ctx.font = '700 18px "Inter", "DejaVu Sans", sans-serif';
-          ctx.fillText(spec.vol, W / 2, 48, W - 12);
+          actx.fillStyle = spec.bandFg || spec.fg || '#f4f0e6';
+          actx.textAlign = 'center';
+          actx.font = '700 18px "Inter", "DejaVu Sans", sans-serif';
+          actx.fillText(spec.vol, W / 2, 48, W - 12);
         }
         if (spec.pub) {
-          ctx.fillStyle = spec.fg || '#f4f0e6';
-          ctx.textAlign = 'center';
-          ctx.font = '700 13px "Inter", "DejaVu Sans", sans-serif';
-          ctx.fillText(spec.pub, W / 2, H - 20, W - 12);
+          actx.fillStyle = spec.fg || '#f4f0e6';
+          actx.textAlign = 'center';
+          actx.font = '700 13px "Inter", "DejaVu Sans", sans-serif';
+          actx.fillText(spec.pub, W / 2, H - 20, W - 12);
         }
       }
 
-      // Vertical title + author along the spine center (readable top-to-bottom like real US/EU books!)
-      ctx.save();
-      ctx.translate(W / 2, H * 0.51);
-      ctx.rotate(Math.PI / 2);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      actx.save();
+      actx.translate(W / 2, H * 0.51);
+      actx.rotate(Math.PI / 2);
+      actx.textAlign = 'center';
+      actx.textBaseline = 'middle';
 
       const fg = spec.fg || (style === 'gtm' || style === 'utm' ? '#15171c' : '#f4f0e6');
-      ctx.fillStyle = fg;
+      actx.fillStyle = fg;
       const titleStr = spec.title || '';
       const authorStr = spec.author || '';
       const fontFamily = (style === 'gtm' || style === 'knuth') ? '"Georgia", serif' : '"Inter", "DejaVu Sans", sans-serif';
       const titleSize = titleStr.length > 26 ? 19 : titleStr.length > 18 ? 22 : 25;
-      ctx.font = `700 ${titleSize}px ${fontFamily}`;
-      ctx.fillText(titleStr, 0, authorStr ? -14 : 0, 315);
+      actx.font = `700 ${titleSize}px ${fontFamily}`;
+      actx.fillText(titleStr, 0, authorStr ? -14 : 0, 315);
 
       if (authorStr) {
-        ctx.fillStyle = spec.authorFg || (style === 'knuth' ? '#f2ebd4' : fg);
-        ctx.globalAlpha = 0.86;
-        ctx.font = `600 15px ${fontFamily}`;
-        ctx.fillText(authorStr, 0, 16, 300);
+        actx.fillStyle = spec.authorFg || (style === 'knuth' ? '#f2ebd4' : fg);
+        actx.globalAlpha = 0.86;
+        actx.font = `600 15px ${fontFamily}`;
+        actx.fillText(authorStr, 0, 16, 300);
       }
-      ctx.restore();
+      actx.restore();
+      actx.restore();
 
-      const tex = new THREE.CanvasTexture(c);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-      return tex;
+      const u0 = (col + 0.015) / ATLAS_COLS;
+      const u1 = (col + 0.985) / ATLAS_COLS;
+      // Three.js CanvasTexture flips Y (v=1 is top of canvas, v=0 is bottom)
+      const vTop = 1.0 - (row + 0.01) / ATLAS_ROWS;
+      const vBot = 1.0 - (row + 0.99) / ATLAS_ROWS;
+      return { u0, u1, vBot, vTop };
     };
 
+    const spineAtlasTex = new THREE.CanvasTexture(atlasC);
+    spineAtlasTex.colorSpace = THREE.SRGBColorSpace;
+    spineAtlasTex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    const sharedSpineMat = new THREE.MeshStandardMaterial({ map: spineAtlasTex, roughness: 0.58, metalness: 0.04 });
+    const coverMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.68, metalness: 0.04 });
     const pageMat = new THREE.MeshStandardMaterial({ color: 0xe6dfd0, roughness: 0.88 });
-    const addBook = (parent, xLeft, baseY, spec) => {
+
+    // Merge all ~100 books into 3 single BufferGeometry meshes (spines, covers, pages) -> slashes ~600 draw calls down to 3!
+    const spineBuf = { pos: [], norm: [], uv: [] };
+    const pageBuf = { pos: [], norm: [] };
+    const coverBuf = { pos: [], norm: [], col: [] };
+    const tmpCol = new THREE.Color();
+
+    const pushBookQuad = (buf, p0, p1, p2, p3, n, cx, cy, cz, cosT, sinT, uvs = null, col = null) => {
+      const rnx = n[0] * cosT - n[1] * sinT;
+      const rny = n[0] * sinT + n[1] * cosT;
+      const rnz = n[2];
+      const verts = [p0, p1, p2, p0, p2, p3];
+      const uvIdx = [0, 1, 2, 0, 2, 3];
+      for (let i = 0; i < 6; i++) {
+        const v = verts[i];
+        buf.pos.push(
+          v[0] * cosT - v[1] * sinT + cx,
+          v[0] * sinT + v[1] * cosT + cy,
+          v[2] + cz
+        );
+        buf.norm.push(rnx, rny, rnz);
+        if (uvs) {
+          const uv = uvs[uvIdx[i]];
+          buf.uv.push(uv[0], uv[1]);
+        }
+        if (col) {
+          buf.col.push(col.r, col.g, col.b);
+        }
+      }
+    };
+
+    const addBook = (_parent, xLeft, baseY, spec) => {
       const bw = spec.w || 0.036;
       const bh = spec.h || 0.245;
       const bd = spec.d || 0.195;
       const zOff = spec.zOff || 0;
       const tiltZ = spec.tilt || 0;
 
-      const spineTex = createBookSpineTexture(spec);
-      const boardMat = new THREE.MeshStandardMaterial({ color: spec.bg, roughness: 0.68, metalness: 0.04 });
-      const spineMat = new THREE.MeshStandardMaterial({ map: spineTex, roughness: 0.58, metalness: 0.04 });
+      const uvRect = drawBookSpineIntoAtlas(spec);
+      const hw = bw * 0.5;
+      const hh = bh * 0.5;
+      const hd = bd * 0.5;
+      const cx = xLeft + hw;
+      const cy = baseY + hh + 0.0005;
+      const cz = 0.035 + zOff;
+      const cosT = Math.cos(tiltZ);
+      const sinT = Math.sin(tiltZ);
 
-      // BoxGeometry face order: +X (right cover), -X (left cover), +Y (top pages), -Y (bottom pages), +Z (SPINE facing room!), -Z (fore-edge pages)
-      const mats = [boardMat, boardMat, pageMat, pageMat, spineMat, pageMat];
-      const book = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), mats);
-      book.position.set(xLeft + bw / 2, baseY + bh / 2 + 0.0005, 0.035 + zOff);
-      book.rotation.z = tiltZ;
-      book.castShadow = true;
-      book.receiveShadow = true;
-      parent.add(book);
+      // +Z spine face facing room
+      pushBookQuad(
+        spineBuf,
+        [-hw, -hh, hd], [hw, -hh, hd], [hw, hh, hd], [-hw, hh, hd],
+        [0, 0, 1], cx, cy, cz, cosT, sinT,
+        [[uvRect.u0, uvRect.vBot], [uvRect.u1, uvRect.vBot], [uvRect.u1, uvRect.vTop], [uvRect.u0, uvRect.vTop]]
+      );
+
+      // +X right cover & -X left cover (vertex-colored)
+      tmpCol.set(spec.bg || '#2b3240');
+      pushBookQuad(coverBuf, [hw, -hh, hd], [hw, -hh, -hd], [hw, hh, -hd], [hw, hh, hd], [1, 0, 0], cx, cy, cz, cosT, sinT, null, tmpCol);
+      pushBookQuad(coverBuf, [-hw, -hh, -hd], [-hw, -hh, hd], [-hw, hh, hd], [-hw, hh, -hd], [-1, 0, 0], cx, cy, cz, cosT, sinT, null, tmpCol);
+
+      // +Y top pages, -Y bottom pages, -Z fore-edge pages
+      pushBookQuad(pageBuf, [-hw, hh, hd], [hw, hh, hd], [hw, hh, -hd], [-hw, hh, -hd], [0, 1, 0], cx, cy, cz, cosT, sinT);
+      pushBookQuad(pageBuf, [-hw, -hh, -hd], [hw, -hh, -hd], [hw, -hh, hd], [-hw, -hh, hd], [0, -1, 0], cx, cy, cz, cosT, sinT);
+      pushBookQuad(pageBuf, [hw, -hh, -hd], [-hw, -hh, -hd], [-hw, hh, -hd], [hw, hh, -hd], [0, 0, -1], cx, cy, cz, cosT, sinT);
+
       return bw + 0.003;
     };
 
@@ -2389,6 +2376,21 @@ export class OfficeScene {
       }
     }
 
+    const finalizeMergedMesh = (buf, mat) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(buf.pos, 3));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(buf.norm, 3));
+      if (buf.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(buf.uv, 2));
+      if (buf.col) g.setAttribute('color', new THREE.Float32BufferAttribute(buf.col, 3));
+      const m = new THREE.Mesh(g, mat);
+      m.castShadow = false;
+      m.receiveShadow = true;
+      shelfGroup.add(m);
+    };
+    finalizeMergedMesh(spineBuf, sharedSpineMat);
+    finalizeMergedMesh(coverBuf, coverMat);
+    finalizeMergedMesh(pageBuf, pageMat);
+
     this._addContactShadow(shelfGroup, 0, 0.003, 0, 1.85, 0.54, 0.46);
     this.scene.add(shelfGroup);
 
@@ -2487,8 +2489,6 @@ export class OfficeScene {
 
       const daliMat = new THREE.MeshStandardMaterial({
         color: 0xffffff,
-        bumpMap: weaveBump,
-        bumpScale: 0.004,
         roughness: 0.46,
         metalness: 0.02,
         envMapIntensity: 0.32,
@@ -2543,15 +2543,12 @@ export class OfficeScene {
           obj.material.emissiveMap.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         }
         if (mName === 'Nest_CoverGlass') {
-          obj.material = new THREE.MeshPhysicalMaterial({
+          obj.material = new THREE.MeshStandardMaterial({
             color: 0xffffff,
             transparent: true,
             opacity: 0.14,
             roughness: 0.04,
-            metalness: 0.05,
-            clearcoat: 1.0,
-            clearcoatRoughness: 0.03,
-            reflectivity: 0.95,
+            metalness: 0.14,
             envMapIntensity: 1.8,
             depthWrite: false,
           });
@@ -2613,19 +2610,14 @@ export class OfficeScene {
         if (!obj.isMesh || !obj.material) return;
         if (obj.material.name?.startsWith('Fig_Leaf')) {
           ensureLeafUVs(obj.geometry);
-          obj.material = new THREE.MeshPhysicalMaterial({
+          obj.material = new THREE.MeshStandardMaterial({
             name: obj.material.name,
             color: new THREE.Color(0xf4f6ec),
             map: figLeafPBR.map,
             bumpMap: figLeafPBR.bumpMap,
             bumpScale: 0.018,
-            roughness: 0.50,
-            metalness: 0.0,
-            clearcoat: 0.16,
-            clearcoatRoughness: 0.45,
-            sheen: 0.28,
-            sheenColor: new THREE.Color(0x5c7c28),
-            sheenRoughness: 0.65,
+            roughness: 0.46,
+            metalness: 0.02,
             emissive: new THREE.Color(0x283e0e),
             emissiveIntensity: 0.18,
             side: THREE.DoubleSide,
@@ -2659,18 +2651,14 @@ export class OfficeScene {
           obj.material.metalness = 0.02;
         } else if (mn.includes('leaf') || mn.includes('blade') || mn.includes('snake')) {
           ensureLeafUVs(obj.geometry);
-          obj.material = new THREE.MeshPhysicalMaterial({
+          obj.material = new THREE.MeshStandardMaterial({
             name: obj.material.name,
             color: new THREE.Color(0xf6f8ef),
             map: snakeLeafPBR.map,
             bumpMap: snakeLeafPBR.bumpMap,
             bumpScale: 0.016,
-            roughness: 0.46,
-            metalness: 0.0,
-            clearcoat: 0.18,
-            clearcoatRoughness: 0.44,
-            sheen: 0.24,
-            sheenColor: new THREE.Color(0x5a7e28),
+            roughness: 0.44,
+            metalness: 0.02,
             emissive: new THREE.Color(0x1c320e),
             emissiveIntensity: 0.16,
             side: THREE.DoubleSide,
@@ -3168,15 +3156,12 @@ export class OfficeScene {
           obj.material.map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         }
         if (mName === 'LavaLamp_Glass') {
-          obj.material = new THREE.MeshPhysicalMaterial({
+          obj.material = new THREE.MeshStandardMaterial({
             color: 0xfff8f5,
             transparent: true,
             opacity: 0.22,
             roughness: 0.05,
-            metalness: 0.04,
-            clearcoat: 1.0,
-            clearcoatRoughness: 0.04,
-            reflectivity: 0.95,
+            metalness: 0.14,
             envMapIntensity: 1.75,
             depthWrite: false,
           });
@@ -3414,7 +3399,7 @@ export class OfficeScene {
         if (matName === 'Corsair_TemperedGlass') {
           const glassTex = createTemperedGlassTexture();
           glassTex.anisotropy = maxAniso;
-          obj.material = new THREE.MeshPhysicalMaterial({
+          obj.material = new THREE.MeshStandardMaterial({
             map: glassTex,
             emissiveMap: glassTex,
             emissive: new THREE.Color(0xffe6c4),
@@ -3423,13 +3408,9 @@ export class OfficeScene {
             side: THREE.DoubleSide,
             transparent: true,
             opacity: 0.90,
-            roughness: 0.03,
-            metalness: 0.06,
-            ior: 1.52,
-            reflectivity: 0.96,
-            clearcoat: 1.0,
-            clearcoatRoughness: 0.03,
-            envMapIntensity: 1.35,
+            roughness: 0.04,
+            metalness: 0.16,
+            envMapIntensity: 1.45,
             depthWrite: false,
           });
           obj.renderOrder = 10;
@@ -3612,20 +3593,8 @@ export class OfficeScene {
             obj.material.map.needsUpdate = true;
           }
           if (obj.material?.name === 'Spark_GoldMetalFoam') {
+            // Share GPU textures across all 6 DGX Spark units (zero 18x redundant texture uploads!) while keeping subtle per-unit anodized tint
             const m = obj.material.clone();
-            const flipX = i % 2 === 1 ? -1 : 1;
-            const flipY = i % 4 >= 2 ? -1 : 1;
-            const uOff = ((i * 0.37) % 1);
-            const vOff = ((i * 0.29) % 1);
-            for (const key of ['map', 'normalMap', 'roughnessMap']) {
-              if (m[key]) {
-                m[key] = m[key].clone();
-                m[key].wrapS = m[key].wrapT = THREE.RepeatWrapping;
-                m[key].repeat.set(flipX, flipY);
-                m[key].offset.set(uOff, vOff);
-                m[key].needsUpdate = true;
-              }
-            }
             const tintShift = 0.94 + ((i * 37) % 11) * 0.012;
             m.color.setRGB(tintShift, tintShift * 0.98, tintShift * 0.94);
             m.needsUpdate = true;
@@ -3896,6 +3865,7 @@ export class OfficeScene {
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide,
+      forceSinglePass: true,
     });
 
     for (const bx of [-1.55, -0.15, 1.25]) {
@@ -3924,7 +3894,10 @@ export class OfficeScene {
     this.skyUniforms.uCloudShadow.value.copy(m.cloudShadow);
     this.skyUniforms.uSunDir.value.copy(m.sunDir);
 
-    if (this.skylineMat && this.skylineTextures[m.id]) {
+    if (this.skylineMat) {
+      if (!this.skylineTextures[m.id]) {
+        this.skylineTextures[m.id] = this._loadSkylineTexture(m, 0, false);
+      }
       const tex = this.skylineTextures[m.id];
       this.skylineMat.map = tex;
       this.skylineMat.color.setHex(m.skylineTint || 0xffffff);
@@ -3939,8 +3912,7 @@ export class OfficeScene {
     this.sunLight.position.copy(m.sunDir).multiplyScalar(14);
 
     this.windowPortalLight.color.setHex(m.portalColor);
-    this.windowPortalLight.intensity = m.portalIntensity;
-    this.pendantAreaLight.intensity = m.pendantIntensity;
+    this.windowPortalLight.intensity = m.portalIntensity * 0.85;
 
     this.hemiLight.color.setHex(m.hemiSky);
     this.hemiLight.groundColor.setHex(m.hemiGround);
@@ -3952,7 +3924,7 @@ export class OfficeScene {
       const ci = m.id === 'twilight' ? 0.15 : 0.20;
       for (const cm of this.curtainMats) cm.emissiveIntensity = ci;
     }
-    if (this.roomBounceLight) this.roomBounceLight.intensity = m.bounceIntensity;
+    if (this.roomBounceLight) this.roomBounceLight.intensity = m.bounceIntensity + m.pendantIntensity * 0.95;
     this.renderer.toneMappingExposure = m.exposure;
 
     if (this.beamMat) {
@@ -4026,22 +3998,10 @@ export class OfficeScene {
     this.camera.fov = aspect < 0.95 ? Math.min(64, 41 / Math.pow(aspect, 0.42)) : 41;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
-    if (this.composer) {
-      this.composer.setSize(w, h);
-    }
-    if (this.bloomPass) {
-      this.bloomPass.setSize(w, h);
-      // Avoid HalfFloat odd-height mip bloom artifacts on very short landscape mobile viewports
-      this.bloomPass.enabled = h >= 440;
-    }
   }
 
   renderFrame() {
-    if (this.composer) {
-      this.composer.render();
-    } else {
-      this.renderer.render(this.scene, this.camera);
-    }
+    this.renderer.render(this.scene, this.camera);
   }
 
   start() {

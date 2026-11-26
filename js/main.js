@@ -32,9 +32,7 @@ function getDom() {
     narrPlayPause: byId('narrPlayPause'),
     narrSeek: byId('narrSeek'),
     narrSeg: byId('narrSeg'),
-    termTitle: byId('termTitle'),
     focusMonitorBtn: byId('focusMonitorBtn'),
-    term: byId('term'),
     transcriptWrap: byId('transcriptWrap'),
     narrTranscript: byId('narrTranscript'),
   };
@@ -55,6 +53,7 @@ function hideLoadingOverlay(dom) {
 function bootstrap() {
   const dom = getDom();
   const omarchyScreen = new OmarchyScreen();
+  window.__omarchyScreen = omarchyScreen;
   let office = null;
 
   try {
@@ -125,12 +124,14 @@ function bootstrap() {
     });
   }
 
-  // "3D Focus" button zooms camera directly onto the Omarchy Linux monitor
-  dom.focusMonitorBtn.addEventListener('click', () => {
-    if (!office) return;
-    office.goToPreset('monitor');
-    setActiveCamButton(dom.camButtons, 'monitor');
-  });
+  // "Monitor" button zooms camera directly onto the Omarchy Linux monitor
+  if (dom.focusMonitorBtn) {
+    dom.focusMonitorBtn.addEventListener('click', () => {
+      if (!office) return;
+      office.goToPreset('monitor');
+      setActiveCamButton(dom.camButtons, 'monitor');
+    });
+  }
 
   // Blue Angels live jet engine audio toggle
   if (dom.jetAudioBtn) {
@@ -253,18 +254,28 @@ function bootstrap() {
       updatePreamble();
     });
 
-  // Safety failsafe (20s) so an offline/broken connection can never permanently trap the overlay
-  const failsafeP = new Promise((resolve) => setTimeout(resolve, 20000));
+  // Safety failsafe (12s) so a slow or interrupted network can never trap the loading preamble
+  const failsafeP = new Promise((resolve) => setTimeout(resolve, 12000));
   Promise.race([Promise.all([sceneReadyP, solutionsReadyP]), failsafeP]).then(() => {
     if (dom.loadingBarFill) dom.loadingBarFill.style.width = '100%';
     if (dom.loadingCount) dom.loadingCount.textContent = '100%';
     if (dom.loadingStatus) dom.loadingStatus.textContent = 'Ready';
-    solutions.startInitialPlayback();
-    if (office) {
-      office.renderFrame();
-      office.start();
+    try {
+      solutions.startInitialPlayback();
+    } catch (e) {
+      console.error('Playback start error:', e);
     }
-    requestAnimationFrame(() => hideLoadingOverlay(dom));
+    try {
+      if (office) {
+        office.renderFrame();
+        office.start();
+        setTimeout(() => office.preloadSecondarySkylines(), 150);
+      }
+    } catch (e) {
+      console.error('3D start error:', e);
+    } finally {
+      hideLoadingOverlay(dom);
+    }
   });
 }
 

@@ -318,9 +318,7 @@ export class SolutionsController {
     this.screenLastVim = null;
     this.screenPromptIdle = false;
     this.dom.hudNowPlaying.textContent = titleStr;
-    this.dom.termTitle.textContent = `omarchy :: ghostty — ${cleanTitle}`;
     this.dom.statusBadge.textContent = 'Loading…';
-    this.dom.term.innerHTML = `<div class="note">Loading ${escapeHtml(cleanTitle)} mission data…</div>`;
     this._emitScreen();
   }
 
@@ -484,7 +482,7 @@ export class SolutionsController {
           this.narrAudio.addEventListener('loadedmetadata', finish, { once: true });
           this.narrAudio.addEventListener('canplay', finish, { once: true });
           this.narrAudio.addEventListener('error', finish, { once: true });
-          setTimeout(finish, 2500);
+          setTimeout(finish, 1200);
         });
       }
     }
@@ -738,12 +736,11 @@ export class SolutionsController {
     if (showWaitingPrompt) this.screenPromptIdle = false;
   }
 
-  _tagNarr(el, step, role, idx, screenEntry) {
-    if (!this.narrMap) return;
+  _tagNarr(step, role, idx, screenEntry) {
+    if (!this.narrMap || !screenEntry) return;
     const segs = this.narrKeySegs.get(this._narrKey(step, role, idx));
     if (segs && segs.length) {
-      if (el) el.dataset.narrSeg = segs.join(' ');
-      if (screenEntry) screenEntry.segs = segs;
+      screenEntry.segs = segs;
     }
   }
 
@@ -888,14 +885,6 @@ export class SolutionsController {
     const activeText = active >= 0 ? this.redactText(this.narrMap.segments[active].text) : '';
     this.dom.narrSeg.textContent = activeText;
 
-    let first = null;
-    this.dom.term.querySelectorAll('[data-narr-seg]').forEach((d) => {
-      const on = active >= 0 && d.dataset.narrSeg.split(' ').includes(String(active));
-      d.classList.toggle('narr-hl', on);
-      if (on && !first) first = d;
-    });
-    if (first) this._scrollPanelTo(this.dom.term, first);
-
     let activeSegEl = null;
     for (const d of this.dom.narrTranscript.children) {
       const on = active >= 0 && parseInt(d.dataset.seg, 10) === active;
@@ -908,7 +897,6 @@ export class SolutionsController {
 
   _narrClearHL() {
     this.activeNarrSeg = -1;
-    this.dom.term.querySelectorAll('[data-narr-seg]').forEach((d) => d.classList.remove('narr-hl'));
     this.dom.narrSeg.textContent = '';
     for (const d of this.dom.narrTranscript.children) d.classList.remove('active');
   }
@@ -933,13 +921,7 @@ export class SolutionsController {
     });
   }
 
-  _appendLine(html, cls, colwrap, screenObj) {
-    const d = document.createElement('div');
-    if (cls) d.className = cls + (colwrap ? ' w100' : '');
-    d.innerHTML = html;
-    this.dom.term.appendChild(d);
-    this.dom.term.scrollTop = this.dom.term.scrollHeight;
-
+  _appendLine(screenObj) {
     if (screenObj) {
       this.screenLines.push(screenObj);
       if (this.screenLines.length > 260) {
@@ -947,7 +929,7 @@ export class SolutionsController {
       }
       this._emitScreen();
     }
-    return d;
+    return screenObj;
   }
 
   _flatCmds(L) {
@@ -978,8 +960,8 @@ export class SolutionsController {
     if (my !== this.runId) return;
     const cleanLabel = this.redactText(label);
     const entry = { kind: 'note', text: `── ${cleanLabel} ──`, segs: null };
-    const ld = this._appendLine(`<span class="note">── ${escapeHtml(cleanLabel)} ──</span>`, 'note', false, entry);
-    if (nk) this._tagNarr(ld, nk.step, nk.role, nk.idx, entry);
+    this._appendLine(entry);
+    if (nk) this._tagNarr(nk.step, nk.role, nk.idx, entry);
     return this._typeInto('', text, my, nk);
   }
 
@@ -990,15 +972,8 @@ export class SolutionsController {
     this.screenPromptIdle = false;
     const cleanCmd = this.redactText(cmd);
     const screenEntry = { kind: 'cmd', prompt, text: '', typing: true, segs: null };
-    const d = this._appendLine(
-      '<span class="prompt"></span><span class="cmd"></span><span class="cursor"></span>',
-      '',
-      false,
-      screenEntry
-    );
-    if (nk) this._tagNarr(d, nk.step, nk.role, nk.idx, screenEntry);
-    d.querySelector('.prompt').textContent = prompt;
-    const span = d.querySelector('.cmd');
+    this._appendLine(screenEntry);
+    if (nk) this._tagNarr(nk.step, nk.role, nk.idx, screenEntry);
 
     for (let i = 0; i < cleanCmd.length; i++) {
       if (my !== this.runId) return;
@@ -1006,17 +981,13 @@ export class SolutionsController {
         await this._sleep();
         if (my !== this.runId) return;
       }
-      span.textContent += cleanCmd[i];
       screenEntry.text += cleanCmd[i];
-      this.dom.term.scrollTop = this.dom.term.scrollHeight;
       if (i % 2 === 0 || i === cleanCmd.length - 1 || this.narrFF) {
         this._emitScreen();
       }
       await this._delay((24 + Math.random() * 65) * this._speed());
       if (Math.random() < 0.05) await this._delay(200 * this._speed());
     }
-    const cur = d.querySelector('.cursor');
-    if (cur) cur.remove();
     screenEntry.typing = false;
     this._emitScreen();
     await this._delay(240 * this._speed());
@@ -1084,7 +1055,7 @@ export class SolutionsController {
     if (firstStep !== undefined) await this._narrGate(firstStep, 'vimcmd', undefined, my);
     if (my !== this.runId) return;
 
-    this._appendLine(`<span class="note">── editing ${escapeHtml(file)} in vim ──</span>`, 'note', false, {
+    this._appendLine({
       kind: 'note',
       text: `── editing ${file} in vim ──`,
     });
@@ -1092,70 +1063,35 @@ export class SolutionsController {
     if (my !== this.runId) return;
 
     const actions = this._buildVimScript(run, firstStep);
-    const box = this._appendLine('', '', false, null);
-    box.className = 'vimscreen';
-    if (firstStep !== undefined && this.narrMap) {
-      const segs = [];
-      for (let s = firstStep; s < firstStep + run.length; s++) {
-        const ss = this.narrKeySegs.get(this._narrKey(s, 'vim'));
-        if (ss) for (const x of ss) if (!segs.includes(x)) segs.push(x);
-      }
-      if (segs.length) box.dataset.narrSeg = segs.join(' ');
-    }
-
-    const rowsEl = document.createElement('div');
-    const statusEl = document.createElement('div');
-    statusEl.className = 'vimstatus';
-    const modeEl = document.createElement('div');
-    modeEl.className = 'vimmode';
-    box.appendChild(rowsEl);
-    box.appendChild(statusEl);
-    box.appendChild(modeEl);
-
     const buf = {};
     let topLine = 1;
     let curLine = 1;
     let curCol = 1;
     let dirty = false;
+    let modeText = '';
 
-    const gutter = (n) => `${String(n).padStart(3, ' ')} `;
     const ensureVisible = () => {
       if (curLine < topLine) topLine = curLine;
       if (curLine >= topLine + VIM_ROWS) topLine = curLine - VIM_ROWS + 1;
     };
 
     const render = () => {
-      let html = '';
       const vimRowsFor3D = [];
       for (let r = 0; r < VIM_ROWS; r++) {
         const n = topLine + r;
         if (n in buf || n === curLine) {
           const content = n in buf ? buf[n] : '';
           vimRowsFor3D.push({ num: n, text: content, active: n === curLine, col: curCol });
-          let inner;
-          if (n === curLine) {
-            const before = escapeHtml(content.slice(0, curCol - 1));
-            const at = escapeHtml(content.slice(curCol - 1, curCol)) || ' ';
-            const after = escapeHtml(content.slice(curCol));
-            inner = `${before}<span class="vimcursor">${at}</span>${after}`;
-          } else {
-            inner = escapeHtml(content);
-          }
-          html += `<div class="vimrow"><span class="vln">${gutter(n)}</span><span class="vlc">${inner}</span></div>`;
         } else {
           vimRowsFor3D.push({ tilde: true });
-          html += '<div class="vimrow vimtilde"><span class="vln">    </span><span class="vlc">~</span></div>';
         }
       }
-      rowsEl.innerHTML = html;
       const statusTxt = `${file}${dirty ? ' [+]' : ''}   ${curLine},${curCol}   All`;
-      statusEl.textContent = statusTxt;
-      this.dom.term.scrollTop = this.dom.term.scrollHeight;
       this.screenVim = {
         file,
         rows: vimRowsFor3D,
         status: statusTxt,
-        mode: modeEl.textContent,
+        mode: modeText,
       };
       // Keep full buffer snapshot (always including active line) so the 3D Neovim split pane stays rock-solid
       const numSet = new Set(Object.keys(buf).map(Number));
@@ -1166,7 +1102,7 @@ export class SolutionsController {
         lines: allNums.map((num) => ({ num, text: num in buf ? buf[num] : '' })),
         activeLine: curLine,
         editing: true,
-        mode: modeEl.textContent || 'NORMAL',
+        mode: modeText || 'NORMAL',
       };
       this._emitScreen();
     };
@@ -1205,7 +1141,7 @@ export class SolutionsController {
       if (a.t === 'clear') {
         for (const k of Object.keys(buf)) delete buf[k];
         topLine = 1; curLine = 1; curCol = 1; dirty = false;
-        modeEl.textContent = '';
+        modeText = '';
         render();
         await this._delay(260 * this._speed());
       } else if (a.t === 'paste') {
@@ -1213,28 +1149,28 @@ export class SolutionsController {
         curLine = a.n; curCol = a.text.length + 1;
         dirty = true;
         ensureVisible();
-        modeEl.textContent = '-- INSERT --';
+        modeText = '-- INSERT --';
         render();
         await this._delay(260 * this._speed());
       } else if (a.t === 'type') {
         buf[a.n] = '';
         curLine = a.n; curCol = 1;
         ensureVisible();
-        modeEl.textContent = '-- INSERT --';
+        modeText = '-- INSERT --';
         render();
         if (!(await typeChars(a.n, a.text))) return;
         curCol = a.text.length + 1;
         render();
         await this._delay(50 * this._speed());
       } else if (a.t === 'edit') {
-        modeEl.textContent = '';
+        modeText = '';
         curLine = a.n; curCol = 1;
         ensureVisible();
         render();
         await this._delay(200 * this._speed());
         if (my !== this.runId) return;
         buf[a.n] = '';
-        modeEl.textContent = '-- INSERT --';
+        modeText = '-- INSERT --';
         render();
         if (!(await typeChars(a.n, a.text))) return;
         curCol = a.text.length + 1;
@@ -1242,8 +1178,7 @@ export class SolutionsController {
         render();
         await this._delay(100 * this._speed());
       } else if (a.t === 'wq') {
-        modeEl.textContent = '';
-        statusEl.textContent = ':wq';
+        modeText = '';
         this.screenVim = { ...this.screenVim, status: ':wq', mode: '' };
         this._emitScreen();
         await this._delay(360 * this._speed());
@@ -1263,7 +1198,7 @@ export class SolutionsController {
     for (const st of run) {
       if (st.note) {
         const cleanNote = this.redactText(st.note);
-        this._appendLine(`<span class="note">${escapeHtml(cleanNote)}</span>`, 'note', false, {
+        this._appendLine({
           kind: 'note',
           text: cleanNote,
         });
@@ -1279,7 +1214,6 @@ export class SolutionsController {
     if (!G || !G.levels || !G.levels.length) {
       this._stopNarration();
       const cleanTitle = G ? G.title.replace(/ \(SmashTheStack\)$/, '') : 'Wargames';
-      this.dom.term.innerHTML = '<div class="note">No solved levels recorded for this mission yet.</div>';
       this.screenHeader = `${cleanTitle.toUpperCase()} — NO LEVELS YET`;
       this.screenHost = `${this.gameKey}@${G?.host || 'overthewire.org'}`;
       this.screenGoal = `No solved levels recorded for ${cleanTitle} yet.`;
@@ -1288,7 +1222,6 @@ export class SolutionsController {
       this.screenLastVim = null;
       this.screenPromptIdle = true;
       this.dom.hudNowPlaying.textContent = this.screenHeader;
-      this.dom.termTitle.textContent = `omarchy :: ghostty — ${cleanTitle}`;
       this.dom.statusBadge.textContent = '0 levels';
       this.dom.fill.style.width = '0%';
       this._emitScreen();
@@ -1330,24 +1263,17 @@ export class SolutionsController {
     }
 
     this.dom.hudNowPlaying.textContent = titleStr;
-    this.dom.termTitle.textContent = `omarchy :: ghostty — ${cleanTitle} L${L.lvl}`;
     this.dom.statusBadge.textContent = `Level ${L.lvl} / ${G.levels[G.levels.length - 1].lvl}`;
     this.dom.jump.value = String(L.lvl);
     const pct = G.levels.length > 1 ? (idx / (G.levels.length - 1)) * 100 : 100;
     this.dom.fill.style.width = `${pct}%`;
-    this.dom.term.innerHTML = '';
 
-    // Immediately show the chosen level's header, problem statement, and host banner
+    // Immediately show the chosen level's header, problem statement, and host banner on the 3D monitor
     const goalEntry = { kind: 'goal', text: `${titleStr}${desc ? `\n${desc}` : ''}`, segs: null };
-    const gd = this._appendLine(
-      `${escapeHtml(titleStr)} — PROBLEM STATEMENT${desc ? `\n${this._renderSafeHtml(desc)}` : ''}`,
-      'goal',
-      false,
-      goalEntry
-    );
+    this._appendLine(goalEntry);
 
     const hostTag = `${L.user}@${this._flatCmds(L).some((c) => c.trim().startsWith('ssh ')) ? (G.host || 'bandit.labs.overthewire.org') : 'omarchy'}`;
-    this._appendLine(`<span class="note">── ${escapeHtml(hostTag)} ──</span>`, 'note', false, {
+    this._appendLine({
       kind: 'note',
       text: `── ${hostTag} ──`,
     });
@@ -1372,7 +1298,7 @@ export class SolutionsController {
       this.narrGame === this.gameKey &&
       String(this.narrLevel) === String(L.lvl);
     if (myNarr) {
-      this._tagNarr(gd, -1, 'goal', undefined, goalEntry);
+      this._tagNarr(-1, 'goal', undefined, goalEntry);
       this.narrFF = true;
       this._tryStartNarrAudio();
     } else {
@@ -1405,8 +1331,8 @@ export class SolutionsController {
           if (my !== this.runId) return;
           const clean = this.redactText(st.cmd);
           const entry = { kind: 'note', text: clean, segs: null };
-          const nd = this._appendLine(`<span class="note">${escapeHtml(clean)}</span>`, 'note', false, entry);
-          this._tagNarr(nd, si, 'note', undefined, entry);
+          this._appendLine(entry);
+          this._tagNarr(si, 'note', undefined, entry);
           await this._delay(360 * this._speed());
         } else {
           await this._typeCmd(L.user, st.cmd, my, { step: si, role: 'cmd' });
@@ -1419,8 +1345,8 @@ export class SolutionsController {
           if (my !== this.runId) return;
           const cleanOut = this.redactText(rawOut);
           const entry = { kind: 'out', text: cleanOut, segs: null };
-          const od = this._appendLine(this._renderSafeHtml(cleanOut), 'out', expandTabs(cleanOut).length > 100, entry);
-          this._tagNarr(od, si, 'out', oi, entry);
+          this._appendLine(entry);
+          this._tagNarr(si, 'out', oi, entry);
           await this._delay(130 * this._speed());
         }
 
@@ -1429,8 +1355,8 @@ export class SolutionsController {
           if (my !== this.runId) return;
           const cleanNote = this.redactText(st.note);
           const entry = { kind: 'note', text: cleanNote, segs: null };
-          const nd = this._appendLine(`<span class="note">${escapeHtml(cleanNote)}</span>`, 'note', false, entry);
-          this._tagNarr(nd, si, 'note', undefined, entry);
+          this._appendLine(entry);
+          this._tagNarr(si, 'note', undefined, entry);
           await this._delay(220 * this._speed());
         }
         si++;
@@ -1441,7 +1367,7 @@ export class SolutionsController {
           if (my !== this.runId) return;
           if (c.startsWith('#')) {
             const clean = this.redactText(c);
-            this._appendLine(`<span class="note">${escapeHtml(clean)}</span>`, 'note', false, {
+            this._appendLine({
               kind: 'note',
               text: clean,
             });
@@ -1454,7 +1380,7 @@ export class SolutionsController {
       for (const o of (L.out || [])) {
         if (my !== this.runId) return;
         const cleanOut = this.redactText(o);
-        this._appendLine(this._renderSafeHtml(cleanOut), 'out', expandTabs(cleanOut).length > 100, {
+        this._appendLine({
           kind: 'out',
           text: cleanOut,
         });
@@ -1467,18 +1393,13 @@ export class SolutionsController {
       await this._narrGate(-1, 'pw', undefined, my);
       if (my !== this.runId) return;
       const entry = { kind: 'pw', text: 'Next level credential verified: [REDACTED]', segs: null };
-      const pd = this._appendLine(
-        'Next level credential verified: <span class="redacted">[REDACTED]</span>',
-        'out',
-        false,
-        entry
-      );
-      this._tagNarr(pd, -1, 'pw', undefined, entry);
+      this._appendLine(entry);
+      this._tagNarr(-1, 'pw', undefined, entry);
     }
 
     if (L.note) {
       const cleanNote = this.redactText(L.note);
-      this._appendLine(`<span class="note">${escapeHtml(cleanNote)}</span>`, 'note', false, {
+      this._appendLine({
         kind: 'note',
         text: cleanNote,
       });

@@ -4,23 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta name="asset-version" content="6ea142040b">
+  <meta name="asset-version" content="305d7d825a">
   <title>Wargames Office 3D — OverTheWire Solutions</title>
   <meta name="description" content="Interactive 3D office with an Omarchy Linux workstation, Corsair RTX 5090 rig, 8x DGX Spark cluster, and live narrated OverTheWire wargame solutions.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231a1b26'/><path d='M16 6L26 26H21L16 15L11 26H6Z' fill='%237aa2f7'/></svg>">
-  <script>window.__ASSET_VERSION__ = '6ea142040b';</script>
+  <script>window.__ASSET_VERSION__ = '305d7d825a';</script>
   <script type="importmap">
     {
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-        "./js/assetUrl.js": "./js/assetUrl.js?v=6ea142040b",
-        "./js/blueAngelsAudio.js": "./js/blueAngelsAudio.js?v=6ea142040b",
-        "./js/blueAngelsShow.js": "./js/blueAngelsShow.js?v=6ea142040b",
-        "./js/main.js": "./js/main.js?v=6ea142040b",
-        "./js/officeScene.js": "./js/officeScene.js?v=6ea142040b",
-        "./js/omarchyScreen.js": "./js/omarchyScreen.js?v=6ea142040b",
-        "./js/solutions.js": "./js/solutions.js?v=6ea142040b"
+        "./js/assetUrl.js": "./js/assetUrl.js?v=305d7d825a",
+        "./js/blueAngelsAudio.js": "./js/blueAngelsAudio.js?v=305d7d825a",
+        "./js/blueAngelsShow.js": "./js/blueAngelsShow.js?v=305d7d825a",
+        "./js/main.js": "./js/main.js?v=305d7d825a",
+        "./js/officeScene.js": "./js/officeScene.js?v=305d7d825a",
+        "./js/omarchyScreen.js": "./js/omarchyScreen.js?v=305d7d825a",
+        "./js/solutions.js": "./js/solutions.js?v=305d7d825a"
       }
     }
   </script>
@@ -29,15 +29,15 @@
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/OrbitControls.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/geometries/RoundedBoxGeometry.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js">
-  <link rel="modulepreload" href="js/assetUrl.js?v=6ea142040b">
-  <link rel="modulepreload" href="js/blueAngelsAudio.js?v=6ea142040b">
-  <link rel="modulepreload" href="js/blueAngelsShow.js?v=6ea142040b">
-  <link rel="modulepreload" href="js/main.js?v=6ea142040b">
-  <link rel="modulepreload" href="js/officeScene.js?v=6ea142040b">
-  <link rel="modulepreload" href="js/omarchyScreen.js?v=6ea142040b">
-  <link rel="modulepreload" href="js/solutions.js?v=6ea142040b">
-  <link rel="preload" as="image" href="assets/textures/skyline_golden.jpg?v=6ea142040b">
-  <link rel="stylesheet" href="css/style.css?v=6ea142040b">
+  <link rel="modulepreload" href="js/assetUrl.js?v=305d7d825a">
+  <link rel="modulepreload" href="js/blueAngelsAudio.js?v=305d7d825a">
+  <link rel="modulepreload" href="js/blueAngelsShow.js?v=305d7d825a">
+  <link rel="modulepreload" href="js/main.js?v=305d7d825a">
+  <link rel="modulepreload" href="js/officeScene.js?v=305d7d825a">
+  <link rel="modulepreload" href="js/omarchyScreen.js?v=305d7d825a">
+  <link rel="modulepreload" href="js/solutions.js?v=305d7d825a">
+  <link rel="preload" as="image" href="assets/textures/skyline_golden.jpg?v=305d7d825a">
+  <link rel="stylesheet" href="css/style.css?v=305d7d825a">
 </head>
 <body>
   <div id="app" class="app">
@@ -87,8 +87,8 @@
     <aside id="sidePanel" class="side-panel" aria-label="OverTheWire Solutions Console">
       <div class="panel-header">
         <div>
-          <h1>OverTheWire Terminal</h1>
-          <p class="panel-sub">Omarchy Linux · Live narrated replays · Passwords redacted</p>
+          <h1>OverTheWire Missions</h1>
+          <p class="panel-sub">Live on the 3D Omarchy monitor · Narrated replays · Passwords redacted</p>
         </div>
         <div class="panel-header-actions">
           <span id="statusBadge" class="status-badge">Ready</span>
@@ -118,6 +118,7 @@
         <button id="playBtn" class="ctrl-btn primary">‖ Pause</button>
         <button id="restartBtn" class="ctrl-btn" title="Restart current level">⟲ Restart</button>
         <button id="narrBtn" class="ctrl-btn" style="display:none">♪ Narrate</button>
+        <button id="focusMonitorBtn" class="ctrl-btn" title="Zoom 3D camera onto monitor">▣ Monitor</button>
         <label class="speed-wrap">
           <span>Speed</span>
           <select id="speed">
@@ -142,15 +143,6 @@
         <input type="range" id="narrSeek" min="0" max="100" step="0.1" value="0" aria-label="Narration seek">
         <div id="narrSeg" class="narr-caption"></div>
       </section>
-
-      <div class="term-shell">
-        <div class="term-chrome">
-          <span class="term-dots"><i></i><i></i><i></i></span>
-          <span id="termTitle" class="term-title">omarchy :: ghostty</span>
-          <button id="focusMonitorBtn" class="mini-btn" title="Zoom 3D camera onto monitor">3D Focus</button>
-        </div>
-        <div id="term" class="term" aria-label="Terminal solution replay"></div>
-      </div>
 
       <section id="transcriptWrap" class="transcript-wrap" style="display:none" aria-label="Narration Transcript">
         <div class="transcript-head">
@@ -201,6 +193,6 @@
       }, 10000);
     })();
   </script>
-  <script type="module" src="js/main.js?v=6ea142040b"></script>
+  <script type="module" src="js/main.js?v=305d7d825a"></script>
 </body>
 </html>

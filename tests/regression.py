@@ -243,7 +243,7 @@ def test_live_scene_window_and_assets(port):
         assert preamble["overlayHidden"], f"Overlay still visible after __officeReady: {preamble}"
         assert stats["pending"] == 0, f"Revealed scene while assets still pending: {stats}"
         assert len(stats["failed"]) == 0, f"Failed 3D assets: {stats['failed']}"
-        assert len(stats["loaded"]) >= 27, f"Too few assets loaded: {len(stats['loaded'])}"
+        assert len(stats["loaded"]) >= 25, f"Too few assets loaded: {len(stats['loaded'])}"
         assert cdp.eval("Boolean(window.__blueAngelsActive)"), "Blue Angels airshow did not initialize"
         # Exhaustively verify 100% smooth, continuous Blue Angels trajectories across the full closed cycle
         # (ZERO teleports, jumps, orientation flips, or window/cyclorama clipping!) + live Web Audio engine
@@ -393,12 +393,15 @@ def test_terminal_sync_redaction_and_neovim_scroll(port):
         cdp.eval("(() => { const j = document.getElementById('jump'); j.value = '5'; j.dispatchEvent(new Event('change')); })()")
         assert wait_for(cdp, "document.getElementById('hudNowPlaying').textContent === 'BANDIT — LEVEL 5'", 6.0)
 
-        # Switch to Natas L3 and verify password redaction + stays pinned
+        # Verify the side pane no longer renders a duplicate ASCII terminal (terminal belongs on the 3D monitor only!)
+        assert cdp.eval("document.getElementById('term') === null"), "Duplicate ASCII #term still exists in side pane!"
+
+        # Switch to Natas L3 and verify password redaction on the 3D Omarchy monitor + stays pinned
         cdp.eval("(() => { const g = document.getElementById('gameSel'); g.value = 'natas'; g.dispatchEvent(new Event('change')); })()")
         assert wait_for(cdp, "document.getElementById('gameSel').value === 'natas' && document.getElementById('jump').options.length >= 30", 10.0)
         cdp.eval("(() => { const j = document.getElementById('jump'); j.value = '3'; j.dispatchEvent(new Event('change')); })()")
-        assert wait_for(cdp, "document.getElementById('term').innerText.includes('[REDACTED]')", 12.0)
-        txt = cdp.eval("document.getElementById('term').innerText")
+        assert wait_for(cdp, "(window.__omarchyScreen?.state?.lines || []).some(l => (l.text || '').includes('[REDACTED]'))", 12.0)
+        txt = cdp.eval("(window.__omarchyScreen?.state?.lines || []).map(l => (l.prompt || '') + (l.text || '')).join('\\n') + '\\n' + (window.__omarchyScreen?.state?.goal || '')")
         assert "JDrPnuZAKyl6MkiqQGFIddrqpvgOASth" not in txt, "PASSWORD LEAKED!"
         assert "K30JrSRHzjxq3paUQuwozY4MNvmNFyhI" not in txt, "PASSWORD LEAKED!"
 

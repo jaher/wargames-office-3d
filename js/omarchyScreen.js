@@ -5,7 +5,7 @@ import * as THREE from 'three';
 // onto a razor-sharp 21:9 ultrawide 2560x1080 CanvasTexture matching the 34" Dell U3425WE.
 export class OmarchyScreen {
   constructor() {
-    this.scale = 1.2;
+    this.scale = 0.75;
     this.width = 2560;
     this.height = 1080;
     this.canvas = document.createElement('canvas');
@@ -16,8 +16,8 @@ export class OmarchyScreen {
 
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = 16;
-    this.texture.minFilter = THREE.LinearMipmapLinearFilter;
+    this.texture.generateMipmaps = false;
+    this.texture.minFilter = THREE.LinearFilter;
     this.texture.magFilter = THREE.LinearFilter;
 
     this.state = {
