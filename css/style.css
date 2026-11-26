@@ -55,13 +55,13 @@ html, body {
 
 /* Loading overlay */
 .loading-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 50;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 45%, rgba(20, 26, 39, 0.92), rgba(9, 12, 18, 0.98));
+  background: radial-gradient(circle at 50% 45%, rgba(20, 26, 39, 0.96), rgba(9, 12, 18, 0.99));
   transition: opacity 0.45s ease, visibility 0.45s ease;
 }
 
@@ -73,11 +73,13 @@ html, body {
 
 .loading-card {
   text-align: center;
+  min-width: 310px;
+  max-width: 420px;
   padding: 28px 36px;
   border-radius: 14px;
-  background: rgba(18, 24, 36, 0.85);
+  background: rgba(18, 24, 36, 0.90);
   border: 1px solid var(--border);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
 }
 
 .loading-spinner {
@@ -104,6 +106,31 @@ html, body {
   margin-top: 6px;
   font-size: 12px;
   color: var(--muted);
+  min-height: 1.4em;
+}
+
+.loading-bar-track {
+  margin-top: 14px;
+  height: 5px;
+  width: 100%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.loading-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--green));
+  transition: width 0.2s ease-out;
+}
+
+.loading-count {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
 }
 
 /* Floating HUD */

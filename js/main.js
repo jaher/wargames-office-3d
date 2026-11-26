@@ -9,6 +9,8 @@ function getDom() {
     canvas: byId('sceneCanvas'),
     loadingOverlay: byId('loadingOverlay'),
     loadingStatus: byId('loadingStatus'),
+    loadingBarFill: byId('loadingBarFill'),
+    loadingCount: byId('loadingCount'),
     hudNowPlaying: byId('hudNowPlaying'),
     skyMoodBtn: byId('skyMoodBtn'),
     togglePanelBtn: byId('togglePanelBtn'),
@@ -105,11 +107,7 @@ function bootstrap() {
         if (dom.sidePanel) dom.sidePanel.style.transition = '';
       });
     }
-    dom.loadingStatus.textContent = 'Rendering first frame…';
-    office.renderFrame();
-    office.start();
-    // Reveal the 3D scene immediately once first frame is painted — never block on fetches or audio!
-    requestAnimationFrame(() => hideLoadingOverlay(dom));
+    dom.loadingStatus.textContent = 'Loading 3D models, skyline vistas & narration…';
   } catch (err) {
     console.error('3D scene initialization failed:', err);
     dom.loadingStatus.textContent = `WebGL error: ${err?.message || err}`;
@@ -138,6 +136,7 @@ function bootstrap() {
     if (!office) return;
     const mood = office.nextSkyMood();
     dom.skyMoodBtn.textContent = mood.label;
+    office.renderFrame();
   });
 
   // Collapsible side panel toggle
@@ -201,15 +200,61 @@ function bootstrap() {
     if (office) office.resize();
   });
 
-  // Load OverTheWire solutions & voice narration asynchronously in the background
+  // Load OverTheWire solutions & voice narration while holding the loading preamble
+  // until every 3D model, skyline texture, and initial solution/narration asset is ready.
   const solutions = new SolutionsController(dom, (screenState) => {
     omarchyScreen.update(screenState);
   });
 
-  solutions.init().catch((err) => {
-    console.error('Failed to load OverTheWire solutions:', err);
-    dom.hudNowPlaying.textContent = 'Solutions unavailable';
-    dom.statusBadge.textContent = 'Offline';
+  let sceneDone = 0;
+  let sceneTotal = 1;
+  let solutionsReady = false;
+  const updatePreamble = (lastUrl = '') => {
+    const doneSteps = sceneDone + (solutionsReady ? 1 : 0);
+    const totalSteps = Math.max(1, sceneTotal + 1);
+    const pct = Math.min(100, Math.round((doneSteps / totalSteps) * 100));
+    if (dom.loadingBarFill) dom.loadingBarFill.style.width = `${pct}%`;
+    if (dom.loadingCount) dom.loadingCount.textContent = `${pct}%  (${doneSteps} / ${totalSteps})`;
+    if (dom.loadingStatus && lastUrl) {
+      const label = lastUrl.split('/').pop().replace(/\.(glb|jpg|png)$/i, '').replace(/_/g, ' ');
+      dom.loadingStatus.textContent = `Loaded ${label}…`;
+    }
+  };
+
+  const sceneReadyP = office
+    ? office.whenAllAssetsLoaded((done, total, lastUrl) => {
+        sceneDone = done;
+        sceneTotal = Math.max(1, total);
+        updatePreamble(lastUrl);
+      })
+    : Promise.resolve();
+
+  const solutionsReadyP = solutions
+    .init({ deferPlayback: true })
+    .then(() => {
+      solutionsReady = true;
+      updatePreamble();
+    })
+    .catch((err) => {
+      console.error('Failed to load OverTheWire solutions:', err);
+      dom.hudNowPlaying.textContent = 'Solutions unavailable';
+      dom.statusBadge.textContent = 'Offline';
+      solutionsReady = true;
+      updatePreamble();
+    });
+
+  // Safety failsafe (20s) so an offline/broken connection can never permanently trap the overlay
+  const failsafeP = new Promise((resolve) => setTimeout(resolve, 20000));
+  Promise.race([Promise.all([sceneReadyP, solutionsReadyP]), failsafeP]).then(() => {
+    if (dom.loadingBarFill) dom.loadingBarFill.style.width = '100%';
+    if (dom.loadingCount) dom.loadingCount.textContent = '100%';
+    if (dom.loadingStatus) dom.loadingStatus.textContent = 'Ready';
+    solutions.startInitialPlayback();
+    if (office) {
+      office.renderFrame();
+      office.start();
+    }
+    requestAnimationFrame(() => hideLoadingOverlay(dom));
   });
 }
 

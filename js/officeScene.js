@@ -1023,7 +1023,9 @@ export class OfficeScene {
     this._glbQueue = [];
     this._glbInFlight = 0;
     this._glbMaxConcurrent = 6;
-    this._assetStats = { loaded: [], failed: [], pending: 0 };
+    this._assetStats = { total: 0, loaded: [], failed: [], pending: 0 };
+    this._assetProgressCbs = [];
+    this._assetReadyResolvers = [];
     if (typeof window !== 'undefined') {
       window.__assetStats = this._assetStats;
     }
@@ -1121,9 +1123,36 @@ export class OfficeScene {
     }
   }
 
+  _notifyAssetProgress(lastUrl = '') {
+    const done = this._assetStats.loaded.length + this._assetStats.failed.length;
+    const total = Math.max(done, this._assetStats.total);
+    for (const cb of this._assetProgressCbs) {
+      try { cb(done, total, lastUrl); } catch { /* ignore */ }
+    }
+    if (this._assetStats.pending === 0 && this._assetReadyResolvers.length > 0) {
+      const resolvers = this._assetReadyResolvers.splice(0);
+      for (const r of resolvers) r(this._assetStats);
+    }
+  }
+
+  whenAllAssetsLoaded(onProgress) {
+    if (typeof onProgress === 'function') {
+      this._assetProgressCbs.push(onProgress);
+      const done = this._assetStats.loaded.length + this._assetStats.failed.length;
+      onProgress(done, Math.max(done, this._assetStats.total), '');
+    }
+    if (this._assetStats.pending === 0 && this._assetStats.total > 0) {
+      return Promise.resolve(this._assetStats);
+    }
+    return new Promise((resolve) => {
+      this._assetReadyResolvers.push(resolve);
+    });
+  }
+
   // Helper to load a real-world Blender .glb model cleanly with bounded concurrency,
   // automatic retries on transient HTTP/2 or network hiccups, shadow setup & crisp metallic IBL.
   _loadGLB(url, onLoaded, retries = 3) {
+    this._assetStats.total++;
     this._assetStats.pending++;
     this._glbQueue.push({ url, onLoaded, retries, attempt: 0 });
     this._drainGLBQueue();
@@ -1151,6 +1180,7 @@ export class OfficeScene {
             }
           });
           job.onLoaded(root);
+          this._notifyAssetProgress(job.url);
           this._drainGLBQueue();
         },
         undefined,
@@ -1167,6 +1197,7 @@ export class OfficeScene {
             this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
             this._assetStats.failed.push(job.url);
             console.warn(`Failed to load GLB ${job.url} after ${job.retries} retries:`, err);
+            this._notifyAssetProgress(job.url);
             this._drainGLBQueue();
           }
         }
@@ -1176,7 +1207,10 @@ export class OfficeScene {
 
   _loadSkylineTexture(mood, attempt = 0) {
     const reqUrl = attempt > 0 ? `${mood.skylineUrl}?retry=${attempt}` : mood.skylineUrl;
-    if (attempt === 0) this._assetStats.pending++;
+    if (attempt === 0) {
+      this._assetStats.total++;
+      this._assetStats.pending++;
+    }
     const tex = this.texLoader.load(
       reqUrl,
       (loadedTex) => {
@@ -1198,6 +1232,7 @@ export class OfficeScene {
           this.skylineMat.transparent = false;
           this.skylineMat.needsUpdate = true;
         }
+        this._notifyAssetProgress(mood.skylineUrl);
       },
       undefined,
       (err) => {
@@ -1207,6 +1242,7 @@ export class OfficeScene {
           this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
           this._assetStats.failed.push(mood.skylineUrl);
           console.warn(`Failed to load skyline texture ${mood.skylineUrl}:`, err);
+          this._notifyAssetProgress(mood.skylineUrl);
         }
       }
     );
@@ -2574,7 +2610,7 @@ export class OfficeScene {
     });
 
     this._loadGLB('assets/models/meta_neural_band.glb', (band) => {
-      band.position.set(0.28, sy + 0.002, -0.58);
+      band.position.set(0.21, sy + 0.002, -0.58);
       // Resting gently on its side edge at a 3/4 angle so the hollow oval sEMG wristband loop & clasp read unmistakably from overview!
       band.rotation.set(0.28, 0.72, 0.14);
       band.traverse((obj) => {
@@ -2583,8 +2619,58 @@ export class OfficeScene {
           obj.material.roughness = 0.68;
         }
       });
-      this._addContactShadow(deskGroup, 0.28, sy + 0.0014, -0.58, 0.13, 0.11, 0.94);
+      this._addContactShadow(deskGroup, 0.21, sy + 0.0014, -0.58, 0.13, 0.11, 0.94);
       deskGroup.add(band);
+    });
+
+    // comma.ai Chestnut USB4 eGPU Dock + NVIDIA GeForce RTX 3090 Founders Edition (exact 313 x 61 x 138 mm 3-slot GPU!)
+    const egpuX = 0.50;
+    const egpuZ = -0.62;
+    const egpuRotY = -0.22;
+    this._loadGLB('assets/models/comma_rtx3090.glb', (egpu) => {
+      const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
+      egpu.position.set(egpuX, sy, egpuZ);
+      egpu.rotation.y = egpuRotY;
+      egpu.traverse((obj) => {
+        if (!obj.isMesh) return;
+        obj.userData.camPreset = 'pc';
+        this.clickableMeshes.push(obj);
+        if (obj.material) {
+          if (obj.material.map) {
+            obj.material.map.anisotropy = maxAniso;
+            obj.material.map.needsUpdate = true;
+          }
+          if (obj.material.emissiveMap) {
+            obj.material.emissiveMap.anisotropy = maxAniso;
+            obj.material.emissiveMap.needsUpdate = true;
+          }
+          const mName = obj.material.name || '';
+          if (mName === 'RTX3090_TitaniumFrame' || mName === 'Comma_Steel') {
+            obj.material.envMapIntensity = 1.15;
+          } else if (mName === 'Comma_AluBase' || mName === 'RTX3090_GunmetalBody') {
+            obj.material.envMapIntensity = 0.65;
+          } else if (mName === 'RTX3090_GeForceLogo') {
+            obj.material.emissiveIntensity = 1.65;
+            obj.material.polygonOffset = true;
+            obj.material.polygonOffsetFactor = -2;
+            obj.material.polygonOffsetUnits = -2;
+          } else if (mName === 'Comma_LinkLED') {
+            obj.material.emissiveIntensity = 3.2;
+          } else if (mName === 'RTX3090_ModelBadge' || mName === 'Comma_ChestnutPCB') {
+            obj.material.polygonOffset = true;
+            obj.material.polygonOffsetFactor = -2;
+            obj.material.polygonOffsetUnits = -2;
+          }
+        }
+        // Register both RTX 3090 FE push-pull flow-through axial fans for live Three.js rotation
+        if (obj.name === 'RTX3090_FanFront') {
+          this.spinningFans.push({ obj, axis: 'z', speed: 7.6 });
+        } else if (obj.name === 'RTX3090_FanBack') {
+          this.spinningFans.push({ obj, axis: 'z', speed: -8.1 });
+        }
+      });
+      this._addContactShadow(deskGroup, egpuX + 0.02, sy + 0.0012, egpuZ, 0.34, 0.16, 0.92);
+      deskGroup.add(egpu);
     });
 
     // Tripp Lite ISOBAR8ULTRA 8-Outlet All-Metal Surge Suppressor Seated Flush on Floor/Rug + Grounded AO + Direct Rear Wall-Outlet Routing!
@@ -2932,6 +3018,48 @@ export class OfficeScene {
       [lavaX - 0.02, 0.130, -1.365],
       isoPt(0.068, 0.022),
     ], 0.0032);
+
+    // 8. comma.ai Chestnut USB4 Type-C host cable + RTX 3090 12-pin / XT60i power loom!
+    const egpuPt = (lx, ly, lz) => {
+      const c = Math.cos(egpuRotY), s = Math.sin(egpuRotY);
+      return [egpuX + lx * c + lz * s, sy + ly, egpuZ - lx * s + lz * c];
+    };
+    // Molded USB4 Type-C plug seated in Comma_USB4Port + braided black USB4 host cable curving to the workstation
+    const usb4PlugPos = egpuPt(0.060, 0.0203, 0.044);
+    const usb4Plug = new THREE.Mesh(new RoundedBoxGeometry(0.012, 0.007, 0.018, 2, 0.002), acPlugMat);
+    usb4Plug.position.set(...usb4PlugPos);
+    usb4Plug.rotation.y = egpuRotY;
+    deskGroup.add(usb4Plug);
+    addAcCord([
+      egpuPt(0.060, 0.0203, 0.052),
+      egpuPt(0.072, 0.015, 0.074),
+      egpuPt(0.145, 0.006, 0.068),
+      egpuPt(0.195, 0.005, 0.005),
+      [0.645, sy + 0.005, -0.78],
+      [0.635, sy + 0.005, -1.04],
+      [0.665, sy + 0.022, -1.16],
+    ], 0.0028, false);
+
+    // RTX 3090 FE angled 12-pin top power cable + Chestnut yellow XT60i 12V cable bundling cleanly back to ISOBAR8ULTRA
+    addAcCord([
+      egpuPt(0.060, 0.181, 0.000),
+      egpuPt(0.068, 0.197, -0.012),
+      egpuPt(0.084, 0.172, -0.048),
+      egpuPt(0.084, 0.092, -0.066),
+      egpuPt(0.078, 0.022, -0.068),
+      [0.605, sy + 0.007, -0.86],
+      [0.588, sy + 0.006, -1.24],
+      [0.578, sy + 0.003, -1.412],
+      [0.558, 0.695, -1.428],
+      [0.515, 0.340, -1.418],
+      [0.505, 0.125, -1.365],
+      isoPt(0.084, -0.018),
+    ], 0.0040);
+    addAcCord([
+      egpuPt(0.066, 0.026, -0.027),
+      egpuPt(0.072, 0.024, -0.048),
+      egpuPt(0.078, 0.022, -0.068),
+    ], 0.0034, false);
 
     this.scene.add(deskGroup);
 
@@ -3611,7 +3739,7 @@ export class OfficeScene {
       endPos: new THREE.Vector3(...preset.pos),
       startTarget: this.controls.target.clone(),
       endTarget: new THREE.Vector3(...preset.target),
-      t: 0,
+      startMs: performance.now(),
       duration: 0.72,
     };
   }
@@ -3681,8 +3809,7 @@ export class OfficeScene {
       this.skyUniforms.uTime.value = elapsed;
 
       if (this.animatingCam) {
-        this.animatingCam.t += dt / this.animatingCam.duration;
-        const k = Math.min(1, this.animatingCam.t);
+        const k = Math.min(1, (performance.now() - this.animatingCam.startMs) / (this.animatingCam.duration * 1000));
         const ease = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
         this.camera.position.lerpVectors(this.animatingCam.startPos, this.animatingCam.endPos, ease);
         this.controls.target.lerpVectors(this.animatingCam.startTarget, this.animatingCam.endTarget, ease);

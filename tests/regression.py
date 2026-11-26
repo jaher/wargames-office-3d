@@ -220,22 +220,32 @@ def test_live_scene_window_and_assets(port):
     print("[2/5] Live 3D assets, default monitor view, and all 3 outside window sky moods...")
     proc, cdp = launch_browser(f"http://127.0.0.1:{port}/?panel=0", debug_port=9271)
     try:
-        assert wait_for(cdp, "Boolean(window.__officeReady && window.__assetStats && window.__assetStats.pending === 0)", 25.0), "Timed out waiting for all 3D assets"
-        stats = cdp.eval("window.__assetStats")
+        assert wait_for(cdp, "Boolean(window.__officeReady)", 25.0), "Timed out waiting for loading preamble to finish"
+        # Loading preamble MUST have kept the overlay visible until ALL assets, solutions & narration finished!
+        preamble = cdp.eval("""(() => ({
+            overlayHidden: document.getElementById('loadingOverlay').classList.contains('hidden'),
+            stats: window.__assetStats,
+            jumpCount: document.getElementById('jump').options.length,
+            transcriptCount: document.getElementById('narrTranscript').children.length,
+        }))()""")
+        stats = preamble["stats"]
+        assert preamble["overlayHidden"], f"Overlay still visible after __officeReady: {preamble}"
+        assert stats["pending"] == 0, f"Revealed scene while assets still pending: {stats}"
         assert len(stats["failed"]) == 0, f"Failed 3D assets: {stats['failed']}"
-        assert len(stats["loaded"]) >= 20, f"Too few assets loaded: {len(stats['loaded'])}"
+        assert len(stats["loaded"]) >= 24, f"Too few assets loaded: {len(stats['loaded'])}"
+        assert preamble["jumpCount"] > 0 and preamble["transcriptCount"] > 0, f"Revealed before solutions/narration ready: {preamble}"
 
         active_cam = cdp.eval("document.querySelector('.cam-btn.active')?.dataset?.cam")
         assert active_cam == "monitor", f"Default camera should be 'monitor', got {active_cam!r}"
 
         # Switch to Skyline View (preset 5) and verify Golden Hour, Twilight, Morning all render rich textured views
         cdp.eval("document.querySelector('.cam-btn[data-cam=\"window\"]').click()")
-        time.sleep(1.5)
+        time.sleep(1.8)
         mood_stats = []
         for mi in range(3):
             if mi > 0:
                 cdp.eval("document.getElementById('skyMoodBtn').click()")
-                time.sleep(0.8)
+                time.sleep(1.2)
             im = cdp.screenshot_image()
             # Center upper window pane (pure exterior vista, clear of monitor/desk)
             mean_rgb, std = crop_variance(im, (520, 180, 920, 420))

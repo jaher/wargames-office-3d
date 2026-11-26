@@ -417,7 +417,7 @@ export class SolutionsController {
     return p;
   }
 
-  async init() {
+  async init({ deferPlayback = false } = {}) {
     // Register Bandit stub immediately; hydrate its HTML in parallel so the initial
     // mission (Vortex) and its narration UI appear without waiting on Bandit's 156 KB HTML.
     this.games.bandit = {
@@ -465,8 +465,32 @@ export class SolutionsController {
     this.fillGames();
     this.fillLevels();
 
-    // Fire level playback asynchronously — NEVER await the full level loop during init!
-    void this.playLevel(0);
+    // Preload initial level narration sync & audio metadata before revealing the scene
+    const firstLevel = this.curGame()?.levels?.[0];
+    if (firstLevel) {
+      await this._loadNarration(this.gameKey, firstLevel.lvl);
+      if (this.narrMap && this.narrMap.audio && this.narrAudio.readyState < 1) {
+        await new Promise((resolve) => {
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            this.narrAudio.removeEventListener('loadedmetadata', finish);
+            this.narrAudio.removeEventListener('canplay', finish);
+            this.narrAudio.removeEventListener('error', finish);
+            resolve();
+          };
+          this.narrAudio.addEventListener('loadedmetadata', finish, { once: true });
+          this.narrAudio.addEventListener('canplay', finish, { once: true });
+          this.narrAudio.addEventListener('error', finish, { once: true });
+          setTimeout(finish, 2500);
+        });
+      }
+    }
+
+    if (!deferPlayback) {
+      void this.playLevel(0);
+    }
 
     // Hydrate Bandit + remaining games in small throttled batches so they never
     // compete with 3D GLB models and skyline textures on initial page load.
@@ -477,6 +501,12 @@ export class SolutionsController {
         this._refreshGameOptionLabels();
       }
     }, 400);
+  }
+
+  startInitialPlayback() {
+    if (!this.userPickedGame) {
+      void this.playLevel(0);
+    }
   }
 
   curGame() {
