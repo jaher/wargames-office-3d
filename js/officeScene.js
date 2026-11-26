@@ -1020,6 +1020,13 @@ export class OfficeScene {
 
     this.gltfLoader = new GLTFLoader();
     this.texLoader = new THREE.TextureLoader();
+    this._glbQueue = [];
+    this._glbInFlight = 0;
+    this._glbMaxConcurrent = 6;
+    this._assetStats = { loaded: [], failed: [], pending: 0 };
+    if (typeof window !== 'undefined') {
+      window.__assetStats = this._assetStats;
+    }
 
     this.brushedMetalTex = createBrushedMetalMap(33);
     this.contactShadowTex = createContactShadowTexture();
@@ -1114,28 +1121,102 @@ export class OfficeScene {
     }
   }
 
-  // Helper to load a real-world Blender .glb model cleanly with shadow setup & crisp metallic IBL (100% live Three.js rendering!)
-  _loadGLB(url, onLoaded) {
-    this.gltfLoader.load(
-      url,
-      (gltf) => {
-        const root = gltf.scene;
-        root.traverse((obj) => {
-          if (obj.isMesh) {
-            obj.castShadow = true;
-            obj.receiveShadow = true;
-            if (obj.material && obj.material.isMeshStandardMaterial && obj.material.metalness >= 0.55) {
-              obj.material.envMapIntensity = 1.48;
+  // Helper to load a real-world Blender .glb model cleanly with bounded concurrency,
+  // automatic retries on transient HTTP/2 or network hiccups, shadow setup & crisp metallic IBL.
+  _loadGLB(url, onLoaded, retries = 3) {
+    this._assetStats.pending++;
+    this._glbQueue.push({ url, onLoaded, retries, attempt: 0 });
+    this._drainGLBQueue();
+  }
+
+  _drainGLBQueue() {
+    while (this._glbInFlight < this._glbMaxConcurrent && this._glbQueue.length > 0) {
+      const job = this._glbQueue.shift();
+      this._glbInFlight++;
+      const reqUrl = job.attempt > 0 ? `${job.url}?retry=${job.attempt}` : job.url;
+      this.gltfLoader.load(
+        reqUrl,
+        (gltf) => {
+          this._glbInFlight--;
+          this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
+          this._assetStats.loaded.push(job.url);
+          const root = gltf.scene;
+          root.traverse((obj) => {
+            if (obj.isMesh) {
+              obj.castShadow = true;
+              obj.receiveShadow = true;
+              if (obj.material && obj.material.isMeshStandardMaterial && obj.material.metalness >= 0.55) {
+                obj.material.envMapIntensity = 1.48;
+              }
             }
+          });
+          job.onLoaded(root);
+          this._drainGLBQueue();
+        },
+        undefined,
+        (err) => {
+          this._glbInFlight--;
+          if (job.attempt < job.retries) {
+            job.attempt++;
+            const delay = 350 * Math.pow(2, job.attempt - 1);
+            setTimeout(() => {
+              this._glbQueue.push(job);
+              this._drainGLBQueue();
+            }, delay);
+          } else {
+            this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
+            this._assetStats.failed.push(job.url);
+            console.warn(`Failed to load GLB ${job.url} after ${job.retries} retries:`, err);
+            this._drainGLBQueue();
           }
-        });
-        onLoaded(root);
+        }
+      );
+    }
+  }
+
+  _loadSkylineTexture(mood, attempt = 0) {
+    const reqUrl = attempt > 0 ? `${mood.skylineUrl}?retry=${attempt}` : mood.skylineUrl;
+    if (attempt === 0) this._assetStats.pending++;
+    const tex = this.texLoader.load(
+      reqUrl,
+      (loadedTex) => {
+        loadedTex.colorSpace = THREE.SRGBColorSpace;
+        loadedTex.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
+        loadedTex.minFilter = THREE.LinearMipmapLinearFilter;
+        loadedTex.magFilter = THREE.LinearFilter;
+        loadedTex.wrapS = THREE.MirroredRepeatWrapping;
+        loadedTex.wrapT = THREE.ClampToEdgeWrapping;
+        loadedTex.repeat.set(1.98, 1.0);
+        loadedTex.offset.set(-0.49, 0.0);
+        loadedTex.needsUpdate = true;
+        this.skylineTextures[mood.id] = loadedTex;
+        this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
+        this._assetStats.loaded.push(mood.skylineUrl);
+        if (this.skylineMat && SKY_MOODS[this.moodIndex]?.id === mood.id) {
+          this.skylineMat.map = loadedTex;
+          this.skylineMat.opacity = 1.0;
+          this.skylineMat.transparent = false;
+          this.skylineMat.needsUpdate = true;
+        }
       },
       undefined,
       (err) => {
-        console.warn(`Failed to load GLB ${url}:`, err);
+        if (attempt < 3) {
+          setTimeout(() => this._loadSkylineTexture(mood, attempt + 1), 350 * Math.pow(2, attempt));
+        } else {
+          this._assetStats.pending = Math.max(0, this._assetStats.pending - 1);
+          this._assetStats.failed.push(mood.skylineUrl);
+          console.warn(`Failed to load skyline texture ${mood.skylineUrl}:`, err);
+        }
       }
     );
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = Math.min(16, this.renderer.capabilities.getMaxAnisotropy());
+    tex.wrapS = THREE.MirroredRepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.repeat.set(1.98, 1.0);
+    tex.offset.set(-0.49, 0.0);
+    return tex;
   }
 
   _updateEnvironmentMap(mood) {
@@ -1289,20 +1370,16 @@ export class OfficeScene {
     });
     this.scene.add(new THREE.Mesh(new THREE.SphereGeometry(180, 32, 20), skyMat));
 
-    // Preload all 3 ultra-photorealistic 16th-floor panoramic city vistas (Golden Hour, Twilight City, Morning Light)
+    // Preload all 3 ultra-photorealistic 16th-floor panoramic city vistas with retry protection
     for (const mood of SKY_MOODS) {
-      const tex = this.texLoader.load(mood.skylineUrl);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = 16;
-      tex.minFilter = THREE.LinearMipmapLinearFilter;
-      tex.magFilter = THREE.LinearFilter;
-      this.skylineTextures[mood.id] = tex;
+      this.skylineTextures[mood.id] = this._loadSkylineTexture(mood);
     }
 
-    // Large curved panoramic photographic cyclorama extended cleanly WELL ABOVE the upper window sightline (ZERO curved top rim!)
+    // Wide 207° curved panoramic photographic cyclorama so even extreme left/right room orbit angles
+    // never expose a vertical cutoff edge outside the window (MirroredRepeatWrapping keeps Bay Bridge centered!)
     const panoR = 32.0;
-    const arc = Math.PI * 0.58;
-    const cylGeo = new THREE.CylinderGeometry(panoR, panoR, 27.5, 72, 1, true, Math.PI - arc * 0.5, arc);
+    const arc = Math.PI * 1.15;
+    const cylGeo = new THREE.CylinderGeometry(panoR, panoR, 27.5, 96, 1, true, Math.PI - arc * 0.5, arc);
     const uvAttr = cylGeo.attributes.uv;
     for (let i = 0; i < uvAttr.count; i++) {
       uvAttr.setX(i, 1.0 - uvAttr.getX(i));
@@ -1314,6 +1391,8 @@ export class OfficeScene {
       color: 0xffffff,
       side: THREE.BackSide,
       toneMapped: true,
+      transparent: true,
+      opacity: 0.0,
     });
     const skylineCyl = new THREE.Mesh(cylGeo, this.skylineMat);
     skylineCyl.position.set(-0.15, 2.55, -1.8);
@@ -2195,6 +2274,64 @@ export class OfficeScene {
     addFramedArt(-3.17, 1.78, -1.62, Math.PI / 2, 0.58, 0.72, 0);
     // Iconic cobalt-blue SIGNAL / NOISE poster cleanly visible & 100% unobstructed between right curtain and right viewport edge!
     addFramedArt(2.64, 1.72, -2.56, 0, 0.36, 0.46, 1);
+
+    // Google Nest Learning Thermostat (3rd Gen, Stainless Steel, Ø 84 mm x 31 mm) mounted flush on the right plaster wall pier
+    const nestX = 2.64;
+    const nestY = 1.24;
+    const nestZ = -2.599;
+    this._loadGLB('assets/models/nest_thermostat.glb', (nest) => {
+      nest.position.set(nestX, nestY, nestZ);
+      nest.traverse((obj) => {
+        if (!obj.isMesh || !obj.material) return;
+        const mName = obj.material.name || '';
+        if (obj.material.map) {
+          obj.material.map.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        }
+        if (obj.material.emissiveMap) {
+          obj.material.emissiveMap.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        }
+        if (mName === 'Nest_CoverGlass') {
+          obj.material = new THREE.MeshPhysicalMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.14,
+            roughness: 0.04,
+            metalness: 0.05,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.03,
+            reflectivity: 0.95,
+            envMapIntensity: 1.8,
+            depthWrite: false,
+          });
+          obj.renderOrder = 5;
+          obj.castShadow = false;
+        } else if (mName === 'Nest_StainlessRing') {
+          obj.material.metalness = 0.94;
+          obj.material.roughness = 0.21;
+          obj.material.envMapIntensity = 1.35;
+        } else if (mName === 'Nest_DisplayFace') {
+          obj.material.emissiveIntensity = 1.05;
+          obj.material.roughness = 0.14;
+        }
+      });
+      this.scene.add(nest);
+    });
+    // Subtle circular ambient occlusion shadow directly on the plaster wall behind the Nest thermostat
+    const nestAo = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.118, 0.118),
+      new THREE.MeshBasicMaterial({
+        map: this.contactShadowTex,
+        transparent: true,
+        opacity: 0.65,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+      })
+    );
+    nestAo.position.set(nestX, nestY - 0.004, nestZ + 0.002);
+    nestAo.renderOrder = 2;
+    this.scene.add(nestAo);
 
     // Helper to ensure procedural Blender botanical meshes have clean 0..1 UVs so leaf venation & variegation textures map accurately!
     const ensureLeafUVs = (geo) => {
@@ -3423,8 +3560,12 @@ export class OfficeScene {
     this.skyUniforms.uSunDir.value.copy(m.sunDir);
 
     if (this.skylineMat && this.skylineTextures[m.id]) {
-      this.skylineMat.map = this.skylineTextures[m.id];
+      const tex = this.skylineTextures[m.id];
+      this.skylineMat.map = tex;
       this.skylineMat.color.setHex(m.skylineTint || 0xffffff);
+      const ready = Boolean(tex.image && tex.image.width > 0);
+      this.skylineMat.opacity = ready ? 1.0 : 0.0;
+      this.skylineMat.transparent = !ready;
       this.skylineMat.needsUpdate = true;
     }
 

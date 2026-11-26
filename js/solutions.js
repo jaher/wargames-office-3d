@@ -468,12 +468,15 @@ export class SolutionsController {
     // Fire level playback asynchronously — NEVER await the full level loop during init!
     void this.playLevel(0);
 
-    // Hydrate Bandit + remaining games in the background so dropdown level counts fill in smoothly
-    // without disrupting any mission/level the user already chose.
-    const allKeys = Object.keys(this.games);
-    Promise.all(allKeys.map((k) => this._ensureGameLoaded(k))).then(() => {
-      this._refreshGameOptionLabels();
-    });
+    // Hydrate Bandit + remaining games in small throttled batches so they never
+    // compete with 3D GLB models and skyline textures on initial page load.
+    const allKeys = Object.keys(this.games).filter((k) => !this.games[k]._loaded);
+    setTimeout(async () => {
+      for (let i = 0; i < allKeys.length; i += 3) {
+        await Promise.all(allKeys.slice(i, i + 3).map((k) => this._ensureGameLoaded(k)));
+        this._refreshGameOptionLabels();
+      }
+    }, 400);
   }
 
   curGame() {
