@@ -57,6 +57,38 @@ function bootstrap() {
     office = new OfficeScene(dom.canvas, omarchyScreen, (preset) => {
       setActiveCamButton(dom.camButtons, preset);
     });
+    // Optional URL params (?cam=cluster&mood=1&panel=0) for direct preset deep-linking
+    const qs = new URLSearchParams(window.location.search);
+    const qsMood = qs.get('mood');
+    if (qsMood !== null && !Number.isNaN(Number(qsMood))) {
+      const mood = office.applySkyMood(Number(qsMood));
+      dom.skyMoodBtn.textContent = mood.label;
+    }
+    const qsCam = qs.get('cam');
+    if (qsCam && office) {
+      office.goToPreset(qsCam);
+      // Snap immediately on initial deep-link load
+      if (office.animatingCam) {
+        office.camera.position.copy(office.animatingCam.endPos);
+        office.controls.target.copy(office.animatingCam.endTarget);
+        office.controls.update();
+        office.animatingCam = null;
+      }
+      setActiveCamButton(dom.camButtons, qsCam);
+    }
+    if (qs.get('panel') === '0') {
+      dom.sidePanel = document.getElementById('sidePanel');
+      if (dom.sidePanel) dom.sidePanel.style.transition = 'none';
+      dom.app.classList.add('panel-collapsed');
+      dom.togglePanelBtn.textContent = 'Show Panel';
+      // Force synchronous layout flush before resizing WebGL canvas so zero black right margin ever appears!
+      void dom.app.offsetWidth;
+      office.resize();
+      requestAnimationFrame(() => {
+        office.resize();
+        if (dom.sidePanel) dom.sidePanel.style.transition = '';
+      });
+    }
     dom.loadingStatus.textContent = 'Rendering first frame…';
     office.renderFrame();
     office.start();

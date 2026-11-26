@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Wargames Office 3D — OverTheWire Solutions</title>
   <meta name="description" content="Interactive 3D office with an Omarchy Linux workstation, Corsair RTX 5090 rig, 8x DGX Spark cluster, and live narrated OverTheWire wargame solutions.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231a1b26'/><path d='M16 6L26 26H21L16 15L11 26H6Z' fill='%237aa2f7'/></svg>">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/OrbitControls.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/geometries/RoundedBoxGeometry.js">
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/lights/RectAreaLightUniformsLib.js">
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/lights/RectAreaLightTexturesLib.js">
   <link rel="modulepreload" href="js/main.js">
@@ -93,9 +95,9 @@
       </section>
 
       <section class="controls-bar" aria-label="Playback Controls">
-        <button id="playBtn" class="ctrl-btn primary">⏸ Pause</button>
+        <button id="playBtn" class="ctrl-btn primary">‖ Pause</button>
         <button id="restartBtn" class="ctrl-btn" title="Restart current level">⟲ Restart</button>
-        <button id="narrBtn" class="ctrl-btn" style="display:none">🔊 Narrate</button>
+        <button id="narrBtn" class="ctrl-btn" style="display:none">♪ Narrate</button>
         <label class="speed-wrap">
           <span>Speed</span>
           <select id="speed">
@@ -113,7 +115,7 @@
 
       <section id="narrBar" class="narr-bar" aria-label="Voice Narration Controls">
         <div class="narr-bar-top">
-          <span class="narr-badge">🎙 Voice</span>
+          <span class="narr-badge">♪ Voice</span>
           <span id="narrTime" class="narr-time">0:00 / 0:00</span>
           <button id="narrPlayPause" class="mini-btn" title="Play or pause voice audio">▶</button>
         </div>

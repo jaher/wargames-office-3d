@@ -140,7 +140,7 @@ export class SolutionsController {
       await this._ensureGameLoaded(this.gameKey);
       this.fillLevels();
       this.playing = true;
-      playBtn.textContent = '⏸ Pause';
+      playBtn.textContent = '‖ Pause';
       void this.playLevel(0);
     };
 
@@ -150,13 +150,13 @@ export class SolutionsController {
       await this._ensureGameLoaded(this.gameKey);
       this.fillLevels();
       this.playing = true;
-      playBtn.textContent = '⏸ Pause';
+      playBtn.textContent = '‖ Pause';
       void this.playLevel(0);
     };
 
     jump.onchange = () => {
       this.playing = true;
-      playBtn.textContent = '⏸ Pause';
+      playBtn.textContent = '‖ Pause';
       const levels = this.curGame()?.levels || [];
       const ix = levels.findIndex((x) => x.lvl === parseInt(jump.value, 10));
       void this.playLevel(ix < 0 ? 0 : ix);
@@ -166,7 +166,7 @@ export class SolutionsController {
 
     restartBtn.onclick = () => {
       this.playing = true;
-      playBtn.textContent = '⏸ Pause';
+      playBtn.textContent = '‖ Pause';
       if (this.narrOn && this.narrMap) {
         this.narrAudio.currentTime = 0;
       }
@@ -191,7 +191,7 @@ export class SolutionsController {
       this.narrAutoplayBlocked = false;
       this._setNarrPref(false);
       this.playing = true;
-      playBtn.textContent = '⏸ Pause';
+      playBtn.textContent = '‖ Pause';
       this._setNarrBtnText();
       this.narrAudio.currentTime = 0;
       void this.playLevel(this.cur);
@@ -206,7 +206,7 @@ export class SolutionsController {
       }
       if (this.narrAudio.paused) {
         this.playing = true;
-        playBtn.textContent = '⏸ Pause';
+        playBtn.textContent = '‖ Pause';
         this._tryStartNarrAudio();
       } else {
         this.narrAudio.pause();
@@ -254,7 +254,7 @@ export class SolutionsController {
 
   togglePlay() {
     this.playing = !this.playing;
-    this.dom.playBtn.textContent = this.playing ? '⏸ Pause' : '▶ Play';
+    this.dom.playBtn.textContent = this.playing ? '‖ Pause' : '▶ Play';
     if (this.narrOn && this.narrMap) {
       if (this.playing) this._tryStartNarrAudio();
       else this.narrAudio.pause();
@@ -264,7 +264,7 @@ export class SolutionsController {
 
   _syncAudioButtons() {
     const isPlayingAudio = this.narrOn && !this.narrAudio.paused && !this.narrAudio.ended;
-    this.dom.narrPlayPause.textContent = isPlayingAudio ? '⏸' : '▶';
+    this.dom.narrPlayPause.textContent = isPlayingAudio ? '‖' : '▶';
   }
 
   _narrPrefOff() {
@@ -285,10 +285,10 @@ export class SolutionsController {
 
   _setNarrBtnText() {
     if (this.narrOn && !this.narrAutoplayBlocked) {
-      this.dom.narrBtn.textContent = '🔇 Narration: On';
+      this.dom.narrBtn.textContent = '✕ Narration: On';
       this.dom.narrBtn.classList.add('narr-on');
     } else {
-      this.dom.narrBtn.textContent = '🔊 Narrate';
+      this.dom.narrBtn.textContent = '♪ Narrate';
       this.dom.narrBtn.classList.remove('narr-on');
     }
   }
@@ -604,7 +604,7 @@ export class SolutionsController {
           this._setNarrBtnText();
         }
         this.playing = true;
-        this.dom.playBtn.textContent = '⏸ Pause';
+        this.dom.playBtn.textContent = '‖ Pause';
         this.narrAudio.currentTime = sg.start;
         this.narrFF = true;
         this._tryStartNarrAudio();

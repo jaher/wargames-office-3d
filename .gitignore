@@ -1,0 +1,8 @@
+*.blend
+*.blend1
+*.blend2
+assets/blender/textures/
+.agents/
+__pycache__/
+*.pyc
+.DS_Store

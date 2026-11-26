@@ -187,21 +187,22 @@ html, body {
 
 .camera-bar {
   position: absolute;
-  bottom: 16px;
+  bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
-  gap: 6px;
-  padding: 6px;
+  gap: 4px;
+  padding: 5px 6px;
   border-radius: 12px;
-  background: rgba(12, 16, 24, 0.76);
+  background: rgba(12, 16, 24, 0.78);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-  max-width: calc(100% - 28px);
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
 }
 
 .cam-btn {
