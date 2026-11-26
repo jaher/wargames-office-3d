@@ -4,6 +4,8 @@ An interactive Three.js 3D office experience showcasing live, voice-narrated [Ov
 
 **Live Site:** https://jaher.github.io/wargames-office-3d/
 
+![Wargames Office 3D — Interactive 3D office workstation with Omarchy Linux monitor, Corsair RTX 5090 PC, and 8× NVIDIA DGX Spark cluster](readme-hero.png)
+
 ## Features
 
 - **Realistic 3D Office Interior** — Hardwood oak flooring, woven area rug, Uplift V2 walnut desk, Blender-modeled Herman Miller Aeron chair, Keychron Q1 Pro 75% CNC aluminum mechanical keyboard, Logitech MX Master 3S ergonomic mouse, Anglepoise Type 75 desk lamp, organic Fiddle-Leaf Fig & Sansevieria plants, cloth-bound books, pleated linen window curtains, and live physically-based Three.js lighting and soft shadows.
