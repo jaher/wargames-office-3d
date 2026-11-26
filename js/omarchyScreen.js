@@ -55,16 +55,53 @@ export class OmarchyScreen {
     }
   }
 
+  _wrapCodeLine(ctx, text, maxWidth) {
+    const clean = String(text || '').replace(/\r/g, '');
+    if (!clean) return [''];
+    if (ctx.measureText(clean).width <= maxWidth) return [clean];
+    const charW = Math.max(1, ctx.measureText('M').width);
+    const maxCols = Math.max(12, Math.floor(maxWidth / charW));
+    const out = [];
+    let rest = clean;
+    while (rest.length > 0) {
+      if (rest.length <= maxCols && ctx.measureText(rest).width <= maxWidth) {
+        out.push(rest);
+        break;
+      }
+      // Find largest prefix fitting within maxWidth
+      let take = Math.min(rest.length, maxCols);
+      while (take > 1 && ctx.measureText(rest.slice(0, take)).width > maxWidth) take--;
+      while (take < rest.length && ctx.measureText(rest.slice(0, take + 1)).width <= maxWidth) take++;
+      // Prefer breaking on a space within the last 30% of the line when possible
+      let cut = take;
+      if (take < rest.length) {
+        const minBreak = Math.floor(take * 0.65);
+        const sp = rest.lastIndexOf(' ', take);
+        if (sp >= minBreak) cut = sp + 1;
+      }
+      out.push(rest.slice(0, cut));
+      rest = rest.slice(cut);
+    }
+    return out.length ? out : [''];
+  }
+
   _wrapText(ctx, text, maxWidth) {
     const clean = String(text || '').replace(/\r/g, '');
     const out = [];
+    const charW = Math.max(1, ctx.measureText('M').width);
+    const estCols = Math.max(12, Math.floor(maxWidth / charW));
     for (const para of clean.split('\n')) {
       if (!para) {
         out.push('');
         continue;
       }
-      if (ctx.measureText(para).width <= maxWidth) {
+      if (para.length <= estCols && ctx.measureText(para).width <= maxWidth) {
         out.push(para);
+        continue;
+      }
+      // Fast monospace fallback for very long single lines so huge outputs never stall rendering
+      if (para.length > 2000) {
+        for (const chunk of this._wrapCodeLine(ctx, para, maxWidth)) out.push(chunk);
         continue;
       }
       // Word-boundary wrapping first (never split ordinary words mid-word!), character fallback only for single long tokens
@@ -581,6 +618,7 @@ export class OmarchyScreen {
 
     const rowH = 33;
     let ry = y + 28;
+    const maxCodeW = Math.max(120, w - 84);
     ctx.font = '500 22px "JetBrains Mono", monospace';
 
     for (const r of vim.rows) {
@@ -588,18 +626,36 @@ export class OmarchyScreen {
       if (r.tilde) {
         ctx.fillStyle = TN.gutter;
         ctx.fillText('    ~', x + 8, ry);
+        ry += rowH;
       } else {
-        ctx.fillStyle = TN.comment;
-        ctx.fillText(`${String(r.num).padStart(3, ' ')} `, x + 8, ry);
-        ctx.fillStyle = TN.fgBright;
-        ctx.fillText(r.text, x + 74, ry);
-        if (r.active && Math.floor(elapsed * 3) % 2 === 0) {
-          const preW = ctx.measureText(r.text.slice(0, Math.max(0, r.col - 1))).width;
-          ctx.fillStyle = TN.blue;
-          ctx.fillRect(x + 74 + preW, ry - 20, 13, 25);
+        const wrapped = this._wrapCodeLine(ctx, r.text || '', maxCodeW);
+        let charOffset = 0;
+        const cursorIdx = Math.max(0, (r.col || 1) - 1);
+        for (let wi = 0; wi < wrapped.length; wi++) {
+          if (ry > y + h - 78) break;
+          const seg = wrapped[wi];
+          if (wi === 0) {
+            ctx.fillStyle = TN.comment;
+            ctx.fillText(`${String(r.num).padStart(3, ' ')} `, x + 8, ry);
+          }
+          ctx.fillStyle = TN.fgBright;
+          ctx.fillText(seg, x + 74, ry);
+          const isLastSeg = wi === wrapped.length - 1;
+          if (
+            r.active &&
+            Math.floor(elapsed * 3) % 2 === 0 &&
+            cursorIdx >= charOffset &&
+            (cursorIdx < charOffset + seg.length || isLastSeg)
+          ) {
+            const localIdx = Math.min(seg.length, cursorIdx - charOffset);
+            const preW = ctx.measureText(seg.slice(0, localIdx)).width;
+            ctx.fillStyle = TN.blue;
+            ctx.fillRect(x + 74 + preW, ry - 20, 13, 25);
+          }
+          charOffset += seg.length;
+          ry += rowH;
         }
       }
-      ry += rowH;
     }
 
     ctx.fillStyle = TN.bgFloat;
@@ -649,31 +705,52 @@ export class OmarchyScreen {
     const lualineH = 30;
     const codeY = y + 36;
     const maxRows = Math.max(1, Math.floor((h - 38 - lualineH) / rowH));
+    const maxCodeW = Math.max(120, w - 58);
     ctx.font = '500 18.5px "JetBrains Mono", Consolas, monospace';
 
-    // Show live typing window if actively editing, else show the complete full file cleanly from line 1!
+    // Wrap every logical code line across visual rows (like Neovim `set wrap`) so long lines
+    // are NEVER truncated with "..." or clipped off the edge.
     const allLines = lastVim.lines || [];
     const activeNum = lastVim.activeLine || 1;
-    let startIdx = 0;
-    if (lastVim.editing && activeNum > maxRows - 3) {
-      startIdx = Math.max(0, activeNum - (maxRows - 3));
+    const visualRows = [];
+    let activeLastVisualIdx = -1;
+    for (const ln of allLines) {
+      const color = this._colorForCodeLine(ln.text, TN);
+      const isCur = Boolean(lastVim.editing && ln.num === activeNum);
+      const wrapped = this._wrapCodeLine(ctx, ln.text || '', maxCodeW);
+      wrapped.forEach((seg, wi) => {
+        const isCursorRow = isCur && wi === wrapped.length - 1;
+        visualRows.push({
+          num: wi === 0 ? ln.num : null,
+          text: seg,
+          color,
+          isCur,
+          isCursorRow,
+        });
+        if (isCur) activeLastVisualIdx = visualRows.length - 1;
+      });
     }
-    const visible = allLines.slice(startIdx, startIdx + maxRows);
+
+    let startIdx = 0;
+    if (lastVim.editing && activeLastVisualIdx >= maxRows - 2) {
+      startIdx = Math.max(0, activeLastVisualIdx - (maxRows - 3));
+    }
+    const visible = visualRows.slice(startIdx, startIdx + maxRows);
 
     let ry = codeY + 18;
-    for (const ln of visible) {
-      const isCur = lastVim.editing && ln.num === activeNum;
-      if (isCur) {
+    for (const vr of visible) {
+      if (vr.isCur) {
         ctx.fillStyle = 'rgba(122, 162, 247, 0.14)';
         ctx.fillRect(x - 4, ry - 19, w + 8, rowH);
       }
-      ctx.fillStyle = isCur ? TN.blue : TN.gutter;
-      ctx.fillText(String(ln.num).padStart(3, ' '), x, ry);
-      ctx.fillStyle = this._colorForCodeLine(ln.text, TN);
-      const clipped = ln.text.length > 68 ? `${ln.text.slice(0, 67)}…` : ln.text;
-      ctx.fillText(clipped, x + 52, ry);
-      if (isCur && Math.floor(elapsed * 2.6) % 2 === 0) {
-        const tw = ctx.measureText(clipped).width;
+      if (vr.num !== null) {
+        ctx.fillStyle = vr.isCur ? TN.blue : TN.gutter;
+        ctx.fillText(String(vr.num).padStart(3, ' '), x, ry);
+      }
+      ctx.fillStyle = vr.color;
+      ctx.fillText(vr.text, x + 52, ry);
+      if (vr.isCursorRow && Math.floor(elapsed * 2.6) % 2 === 0) {
+        const tw = ctx.measureText(vr.text).width;
         ctx.fillStyle = TN.blue;
         ctx.fillRect(x + 54 + tw, ry - 17, 10, 21);
       }

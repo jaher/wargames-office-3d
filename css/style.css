@@ -547,6 +547,7 @@ html, body {
   color: #c8f5d4;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .term .prompt {
