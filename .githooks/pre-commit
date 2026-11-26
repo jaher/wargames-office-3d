@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Automatically refresh the cache-busting asset version in index.html on every commit
+# so browsers always fetch the latest JS, CSS, 3D models, textures, and solution assets.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+if [ -f "${REPO_ROOT}/scripts/bump_cache_version.py" ]; then
+  python3 "${REPO_ROOT}/scripts/bump_cache_version.py"
+  git add "${REPO_ROOT}/index.html"
+fi

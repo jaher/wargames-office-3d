@@ -36,11 +36,13 @@ CHROMIUM = "/usr/bin/chromium"
 
 class AuditHandler(http.server.SimpleHTTPRequestHandler):
     bad_requests = []
+    seen_paths = []
 
     def log_message(self, *args):
         pass
 
     def send_response(self, code, message=None):
+        AuditHandler.seen_paths.append(self.path)
         # Expected 404 probes for levels without .sync.json are ignored; everything else >= 400 fails.
         if code >= 400 and "/narration/" not in self.path:
             AuditHandler.bad_requests.append((code, self.path))
@@ -193,13 +195,21 @@ def test_static_integrity():
     assert mod_idx < 0 or im_idx < mod_idx, "importmap MUST precede all module scripts!"
 
     refs = set()
-    for rel in ["index.html", "js/main.js", "js/officeScene.js", "js/omarchyScreen.js", "js/solutions.js", "css/style.css"]:
+    for rel in ["index.html", "js/main.js", "js/officeScene.js", "js/omarchyScreen.js", "js/solutions.js", "js/blueAngelsShow.js", "js/assetUrl.js", "css/style.css"]:
         txt = open(os.path.join(ROOT, rel)).read()
         for m in re.findall(r"""['"]((?:assets|js|css|overthewire-solutions)/[^'"]+)['"]""", txt):
             if "${" not in m:
-                refs.add(m)
+                refs.add(m.split("?", 1)[0])
     missing = [p for p in sorted(refs) if not os.path.exists(os.path.join(ROOT, p))]
     assert not missing, f"Missing referenced assets: {missing}"
+
+    # Verify cache-busting asset version is stamped consistently in index.html
+    m_meta = re.search(r'<meta\s+name="asset-version"\s+content="([^"]+)"', html)
+    m_win = re.search(r"window\.__ASSET_VERSION__\s*=\s*'([^']+)'", html)
+    assert m_meta and m_win and m_meta.group(1) == m_win.group(1), "Mismatched asset-version markers in index.html"
+    ver = m_meta.group(1)
+    assert re.fullmatch(r"[A-Za-z0-9._-]{6,16}", ver) and ver != "0000000000", f"Invalid/unstamped asset-version: {ver!r}"
+    assert f"css/style.css?v={ver}" in html and f"js/main.js?v={ver}" in html, "Unversioned CSS or entry JS in index.html"
 
     for glb in glob.glob(os.path.join(ROOT, "assets/models/*.glb")):
         with open(glb, "rb") as f:
@@ -218,6 +228,7 @@ def test_static_integrity():
 
 def test_live_scene_window_and_assets(port):
     print("[2/5] Live 3D assets, default monitor view, and all 3 outside window sky moods...")
+    AuditHandler.seen_paths.clear()
     proc, cdp = launch_browser(f"http://127.0.0.1:{port}/?panel=0", debug_port=9271)
     try:
         assert wait_for(cdp, "Boolean(window.__officeReady)", 25.0), "Timed out waiting for loading preamble to finish"
@@ -265,7 +276,15 @@ def test_live_scene_window_and_assets(port):
         diff_12 = sum(abs(mood_stats[1][0][k] - mood_stats[2][0][k]) for k in range(3))
         assert diff_01 > 20 and diff_12 > 20, f"Sky moods did not visibly change: {mood_stats}"
         assert not cdp.exceptions, f"JS exceptions: {cdp.exceptions}"
-        print(f"      PASS ({len(stats['loaded'])} assets loaded, 0 failed, 3 window moods rich & distinct)")
+        # Verify EVERY local asset request (JS, CSS, GLB, textures, solutions/narration) carried ?v=<version>
+        asset_ver = cdp.eval("window.__ASSET_VERSION__")
+        local_reqs = [
+            p for p in AuditHandler.seen_paths
+            if p.startswith(("/css/", "/js/", "/assets/", "/overthewire-solutions/"))
+        ]
+        unversioned = [p for p in local_reqs if f"v={asset_ver}" not in p]
+        assert local_reqs and not unversioned, f"Unversioned asset requests detected (expected v={asset_ver}): {unversioned}"
+        print(f"      PASS ({len(stats['loaded'])} assets loaded, 0 failed, {len(local_reqs)} versioned reqs v={asset_ver}, 3 window moods rich & distinct)")
     finally:
         cdp.close()
         proc.terminate()

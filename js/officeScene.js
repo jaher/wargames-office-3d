@@ -8,6 +8,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { BlueAngelsShow } from './blueAngelsShow.js';
+import { versionedUrl } from './assetUrl.js';
 
 // Camera presets matching index.html [data-cam] buttons.
 export const CAMERA_PRESETS = {
@@ -1163,7 +1164,7 @@ export class OfficeScene {
     while (this._glbInFlight < this._glbMaxConcurrent && this._glbQueue.length > 0) {
       const job = this._glbQueue.shift();
       this._glbInFlight++;
-      const reqUrl = job.attempt > 0 ? `${job.url}?retry=${job.attempt}` : job.url;
+      const reqUrl = versionedUrl(job.url, job.attempt > 0 ? { retry: job.attempt } : null);
       this.gltfLoader.load(
         reqUrl,
         (gltf) => {
@@ -1207,7 +1208,7 @@ export class OfficeScene {
   }
 
   _loadSkylineTexture(mood, attempt = 0) {
-    const reqUrl = attempt > 0 ? `${mood.skylineUrl}?retry=${attempt}` : mood.skylineUrl;
+    const reqUrl = versionedUrl(mood.skylineUrl, attempt > 0 ? { retry: attempt } : null);
     if (attempt === 0) {
       this._assetStats.total++;
       this._assetStats.pending++;
@@ -1257,7 +1258,7 @@ export class OfficeScene {
   }
 
   _loadTrackedTexture(url, onReady, attempt = 0) {
-    const reqUrl = attempt > 0 ? `${url}?retry=${attempt}` : url;
+    const reqUrl = versionedUrl(url, attempt > 0 ? { retry: attempt } : null);
     if (attempt === 0) {
       this._assetStats.total++;
       this._assetStats.pending++;

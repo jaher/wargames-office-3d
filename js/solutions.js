@@ -1,6 +1,7 @@
 // OverTheWire + SmashTheStack solution loader, password redactor,
 // terminal/vim replay engine, and synced audio narration + transcript controller.
 // Reads exclusively from the ./overthewire-solutions/ git submodule.
+import { versionedUrl } from './assetUrl.js';
 
 const SUBMODULE_BASE = 'overthewire-solutions';
 const NARR_PREF_KEY = 'otw-office-narration';
@@ -397,10 +398,10 @@ export class SolutionsController {
       return this._gameFetchPromises.get(key);
     }
     const p = (key === 'bandit'
-      ? fetch(`${SUBMODULE_BASE}/index.html`)
+      ? fetch(versionedUrl(`${SUBMODULE_BASE}/index.html`))
           .then((r) => (r.ok ? r.text() : null))
           .then((html) => (html ? parseBanditFromIndexHtml(html) : null))
-      : fetch(`${SUBMODULE_BASE}/games/${key}.json`).then((r) => (r.ok ? r.json() : null))
+      : fetch(versionedUrl(`${SUBMODULE_BASE}/games/${key}.json`)).then((r) => (r.ok ? r.json() : null))
     )
       .then((data) => {
         if (!data || !this.games[key]) return;
@@ -429,8 +430,8 @@ export class SolutionsController {
     };
 
     const [manifestRes, vortexRes] = await Promise.all([
-      fetch(`${SUBMODULE_BASE}/games/manifest.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(`${SUBMODULE_BASE}/games/vortex.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(versionedUrl(`${SUBMODULE_BASE}/games/manifest.json`)).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(versionedUrl(`${SUBMODULE_BASE}/games/vortex.json`)).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
 
     if (manifestRes && Array.isArray(manifestRes.games)) {
@@ -794,7 +795,7 @@ export class SolutionsController {
 
     try {
       let map = null;
-      const syncRes = await fetch(`${SUBMODULE_BASE}/narration/${game}/L${lvl}.sync.json`, { cache: 'no-store' });
+      const syncRes = await fetch(versionedUrl(`${SUBMODULE_BASE}/narration/${game}/L${lvl}.sync.json`), { cache: 'no-store' });
       if (tok !== this.narrLoadTok) return false;
 
       if (syncRes.ok) {
@@ -802,8 +803,8 @@ export class SolutionsController {
         if (tok !== this.narrLoadTok) return false;
       } else {
         // Fallback for levels that have audio (.mp3) and/or script (.txt) without a .sync.json
-        const mp3Url = `${SUBMODULE_BASE}/narration/${game}/L${lvl}.mp3`;
-        const txtUrl = `${SUBMODULE_BASE}/narration/${game}/L${lvl}.txt`;
+        const mp3Url = versionedUrl(`${SUBMODULE_BASE}/narration/${game}/L${lvl}.mp3`);
+        const txtUrl = versionedUrl(`${SUBMODULE_BASE}/narration/${game}/L${lvl}.txt`);
         const [mp3Ok, txtText] = await Promise.all([
           fetch(mp3Url, { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok).catch(() => false),
           fetch(txtUrl, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : null)).catch(() => null),
@@ -835,7 +836,7 @@ export class SolutionsController {
 
       if (map.audio) {
         const audioPath = String(map.audio).replace(/^\/+/, '');
-        this.narrAudio.src = `${SUBMODULE_BASE}/${audioPath}`;
+        this.narrAudio.src = versionedUrl(`${SUBMODULE_BASE}/${audioPath}`);
         this.dom.narrBtn.style.display = '';
         this.dom.narrBar.classList.add('on');
         this._setNarrTime();
