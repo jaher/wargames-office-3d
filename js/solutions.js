@@ -275,8 +275,9 @@ export class SolutionsController {
       this._emitScreen();
     });
 
-    const narrKick = () => {
-      if (this.narrOn && !this.narrAutoplayBlocked && this.narrMap && this.playing && this.narrAudio.paused) {
+    const narrKick = (ev) => {
+      if (ev && ev.target && ev.target.closest && ev.target.closest('#narrBtn, #narrPlayPause')) return;
+      if (this.narrOn && this.narrMap && this.narrMap.audio && this.playing && this.narrAudio.paused) {
         this._tryStartNarrAudio();
       }
     };
@@ -337,27 +338,30 @@ export class SolutionsController {
     this.dom.narrPlayPause.textContent = isPlayingAudio ? '‖' : '▶';
   }
 
-  // Narration is opt-in so selecting any level immediately shows & replays its
-  // solution on the 3D monitor instead of freezing behind a voiceover timeline.
+  // Narration is ON by default so voiceover plays immediately (or arms for first
+  // browser user gesture if autoplay is restricted) unless the user turns it off.
   _narrPrefOff() {
     try {
-      return typeof localStorage === 'undefined' || localStorage.getItem(NARR_PREF_KEY) !== 'on';
+      return typeof localStorage !== 'undefined' && localStorage.getItem(NARR_PREF_KEY) === 'off';
     } catch {
-      return true;
+      return false;
     }
   }
 
   _setNarrPref(off) {
     try {
       if (typeof localStorage === 'undefined') return;
-      if (off) localStorage.removeItem(NARR_PREF_KEY);
-      else localStorage.setItem(NARR_PREF_KEY, 'on');
+      if (off) localStorage.setItem(NARR_PREF_KEY, 'off');
+      else localStorage.removeItem(NARR_PREF_KEY);
     } catch { /* ignore */ }
   }
 
   _setNarrBtnText() {
     if (this.narrOn && !this.narrAutoplayBlocked) {
       this.dom.narrBtn.textContent = '✕ Narration: On';
+      this.dom.narrBtn.classList.add('narr-on');
+    } else if (this.narrOn && this.narrAutoplayBlocked) {
+      this.dom.narrBtn.textContent = '♪ Narration: Ready';
       this.dom.narrBtn.classList.add('narr-on');
     } else {
       this.dom.narrBtn.textContent = '♪ Narrate';
