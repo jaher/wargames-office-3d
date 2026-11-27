@@ -14,7 +14,6 @@ function getDom() {
     loadingCount: byId('loadingCount'),
     cancelLoadBtn: byId('cancelLoadBtn'),
     retryLoadBtn: byId('retryLoadBtn'),
-    hudNowPlaying: byId('hudNowPlaying'),
     jetAudioBtn: byId('jetAudioBtn'),
     skyMoodBtn: byId('skyMoodBtn'),
     togglePanelBtn: byId('togglePanelBtn'),
@@ -291,7 +290,6 @@ function bootstrap() {
     .catch((err) => {
       if (loadCancelled || err?.name === 'AbortError') return;
       console.error('Failed to load OverTheWire solutions:', err);
-      dom.hudNowPlaying.textContent = 'Solutions unavailable';
       dom.statusBadge.textContent = 'Offline';
       solutionsReady = true;
       updatePreamble();

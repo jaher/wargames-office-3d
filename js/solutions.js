@@ -331,7 +331,6 @@ export class SolutionsController {
     this.screenVim = null;
     this.screenLastVim = null;
     this.screenPromptIdle = false;
-    this.dom.hudNowPlaying.textContent = titleStr;
     this.dom.statusBadge.textContent = 'Loading…';
     this._emitScreen();
   }
@@ -1270,7 +1269,6 @@ export class SolutionsController {
       this.screenVim = null;
       this.screenLastVim = null;
       this.screenPromptIdle = true;
-      this.dom.hudNowPlaying.textContent = this.screenHeader;
       this.dom.statusBadge.textContent = '0 levels';
       this.dom.fill.style.width = '0%';
       this._emitScreen();
@@ -1311,7 +1309,6 @@ export class SolutionsController {
       }
     }
 
-    this.dom.hudNowPlaying.textContent = titleStr;
     this.dom.statusBadge.textContent = `Level ${L.lvl} / ${G.levels[G.levels.length - 1].lvl}`;
     this.dom.jump.value = String(L.lvl);
     const pct = G.levels.length > 1 ? (idx / (G.levels.length - 1)) * 100 : 100;

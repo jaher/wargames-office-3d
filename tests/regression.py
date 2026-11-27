@@ -394,8 +394,9 @@ def test_narration_and_laptop_layout(port):
         assert st["tBot"] <= st["panelBot"] + 2, f"Transcript clipped on 1280x720: {st}"
 
         # Switch to Vortex L12 (.mp3 + .txt without .sync.json)
+        assert cdp.eval("document.querySelector('.brand-pill') === null"), "Top-left brand banner should be removed"
         cdp.eval("(() => { const j = document.getElementById('jump'); j.value = '12'; j.dispatchEvent(new Event('change')); })()")
-        assert wait_for(cdp, "document.getElementById('hudNowPlaying').textContent === 'VORTEX — LEVEL 12' && document.getElementById('narrTranscript').children.length > 0", 10.0)
+        assert wait_for(cdp, "window.__omarchyScreen?.state?.header === 'VORTEX — LEVEL 12' && document.getElementById('narrTranscript').children.length > 0", 10.0)
         st12 = cdp.eval("({bar: document.getElementById('narrBar').classList.contains('on'), btn: getComputedStyle(document.getElementById('narrBtn')).display})")
         assert st12["bar"] and st12["btn"] != "none", f"Vortex L12 narration fallback missing: {st12}"
         assert not cdp.exceptions, f"JS exceptions: {cdp.exceptions}"
@@ -419,7 +420,7 @@ def test_terminal_sync_redaction_and_neovim_scroll(port):
         cdp.eval("(() => { const g = document.getElementById('gameSel'); g.value = 'bandit'; g.dispatchEvent(new Event('change')); })()")
         assert wait_for(cdp, "document.getElementById('gameSel').value === 'bandit' && document.getElementById('jump').options.length >= 30", 10.0)
         cdp.eval("(() => { const j = document.getElementById('jump'); j.value = '5'; j.dispatchEvent(new Event('change')); })()")
-        assert wait_for(cdp, "document.getElementById('hudNowPlaying').textContent === 'BANDIT — LEVEL 5'", 6.0)
+        assert wait_for(cdp, "window.__omarchyScreen?.state?.header === 'BANDIT — LEVEL 5'", 6.0)
 
         # Verify the side pane no longer renders a duplicate ASCII terminal (terminal belongs on the 3D monitor only!)
         assert cdp.eval("document.getElementById('term') === null"), "Duplicate ASCII #term still exists in side pane!"
@@ -435,9 +436,9 @@ def test_terminal_sync_redaction_and_neovim_scroll(port):
 
         # Switch to SmashTheStack -> lands on mission with levels; then Tux -> clean 0 levels
         cdp.eval("(() => { const f = document.getElementById('familySel'); f.value = 's2s'; f.dispatchEvent(new Event('change')); })()")
-        assert wait_for(cdp, "document.getElementById('hudNowPlaying').textContent.includes('LEVEL')", 8.0)
+        assert wait_for(cdp, "(window.__omarchyScreen?.state?.header || '').includes('LEVEL')", 8.0)
         cdp.eval("(() => { const g = document.getElementById('gameSel'); g.value = 'tux'; g.dispatchEvent(new Event('change')); })()")
-        assert wait_for(cdp, "document.getElementById('hudNowPlaying').textContent === 'TUX — NO LEVELS YET'", 6.0)
+        assert wait_for(cdp, "window.__omarchyScreen?.state?.header === 'TUX — NO LEVELS YET'", 6.0)
 
         # Verify OmarchyScreen monotonic Neovim scrolling across all lines of Vortex L0 + :wq
         nv = cdp.eval("""(async () => {
