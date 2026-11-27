@@ -167,10 +167,43 @@ export class BlueAngelsAudio {
       this._whineGain = whineGain;
       this._panner = panner;
       this._masterGain = masterGain;
+      this._noiseBuf = noiseBuf;
       this.started = true;
       return true;
     } catch {
       return false;
+    }
+  }
+
+  // Synthesize an authentic double-pulse N-wave sonic boom (bow shock + tail shock spaced ~85ms apart)
+  // filtered cleanly through closed 16th-floor office window glass.
+  _triggerSonicBoom(windowScale) {
+    if (!this.ctx || !this._noiseBuf || !this._masterGain) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const amp = Math.min(0.42, 0.28 * windowScale);
+
+    for (const delay of [0.0, 0.085]) {
+      const t0 = now + delay;
+      const src = ctx.createBufferSource();
+      src.buffer = this._noiseBuf;
+      src.playbackRate.value = 0.55;
+
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(220, t0);
+      lp.frequency.exponentialRampToValueAtTime(52, t0 + 0.34);
+      lp.Q.value = 1.8;
+
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(amp, t0 + 0.014);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
+
+      src.connect(lp);
+      lp.connect(g);
+      g.connect(ctx.destination);
+      src.start(t0, Math.random() * 1.5, 0.48);
     }
   }
 
@@ -231,6 +264,9 @@ export class BlueAngelsAudio {
 
     if (this._panner) {
       this._panner.pan.setTargetAtTime(Math.max(-0.85, Math.min(0.85, this._curPan)), now, 0.05);
+    }
+    if (metrics.sonicBoom) {
+      this._triggerSonicBoom(windowScale);
     }
   }
 }

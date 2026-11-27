@@ -259,7 +259,7 @@ def test_live_scene_window_and_assets(port):
             const fwd = ba.jets[0].vel.clone();
             let maxStep = 0, maxAng = 0, maxZ = -999, maxCylR = 0;
             const dt = 0.05;
-            for (let j = 0; j < 6; j++) {
+            for (let j = 0; j < ba.jets.length; j++) {
                 ba.evaluateJetPose(j, 0, posA, qA, fwd);
                 for (let s = 1; s <= 1200; s++) {
                     ba.evaluateJetPose(j, s * dt, posB, qB, fwd);
@@ -278,6 +278,8 @@ def test_live_scene_window_and_assets(port):
             const m = ba.getAudioMetrics();
             return {
                 ok: true,
+                jetCount: ba.jets.length,
+                hasSupersonicFX: Boolean(ba.supersonicJet && ba.supersonicFX),
                 maxStep: +maxStep.toFixed(4),
                 maxAng: +maxAng.toFixed(4),
                 maxZ: +maxZ.toFixed(2),
@@ -287,7 +289,7 @@ def test_live_scene_window_and_assets(port):
                 hasBtn: Boolean(document.getElementById('jetAudioBtn')),
             };
         })()""")
-        assert ba_check["ok"], f"Blue Angels check failed: {ba_check}"
+        assert ba_check["ok"] and ba_check["jetCount"] == 7 and ba_check["hasSupersonicFX"], f"Blue Angels check failed: {ba_check}"
         assert ba_check["maxStep"] < 0.85, f"Blue Angels teleport/jump detected: {ba_check}"
         assert ba_check["maxAng"] < 0.45, f"Blue Angels orientation snap/flip detected: {ba_check}"
         assert ba_check["maxZ"] < -10.0 and ba_check["maxCylR"] < 31.0, f"Blue Angels out of exterior airspace: {ba_check}"
