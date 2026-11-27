@@ -2440,9 +2440,8 @@ export class OfficeScene {
     for (let si = 0; si < 5; si++) {
       const baseY = shelfYs[si] + 0.014;
       const items = shelvesCatalog[si];
-      // Compute total row width and center naturally on each shelf so left/right balance feels authentic
-      const rightLimit = sw / 2 - 0.065;
-      const maxSpan = sw - 0.13;
+      // Shelf 3 (y=1.34): Computer Architecture & Operating Systems Classics + Cirrus SR22 Scale Model Showcase!
+      const maxSpan = si === 3 ? sw - 0.62 : sw - 0.13;
       let usedSpan = 0;
       const fitItems = [];
       for (const item of items) {
@@ -2451,7 +2450,7 @@ export class OfficeScene {
         fitItems.push(item);
         usedSpan += step;
       }
-      let cursorX = -usedSpan / 2;
+      let cursorX = si === 3 ? -sw / 2 + 0.08 : -usedSpan / 2;
       for (const item of fitItems) {
         if (item.vase) {
           cursorX += addDecorVase(shelfGroup, cursorX, baseY, item.vase);
@@ -2479,6 +2478,34 @@ export class OfficeScene {
     finalizeMergedMesh(spineBuf, sharedSpineMat);
     finalizeMergedMesh(coverBuf, coverMat);
     finalizeMergedMesh(pageBuf, pageMat);
+
+    // Detailed 1:40 scale Cirrus SR22 (G6/G7 Carbon Edition, low wing, fixed tricycle gear with wheel pants, dorsal CAPS hatch)
+    // displayed on eye-level Shelf 3 (y=1.354) angled 28 deg toward the room for full 3/4 silhouette & detail visibility!
+    const sr22X = 0.46;
+    const sr22Y = shelfYs[3] + 0.014;
+    const sr22Z = 0.018;
+    this._loadGLB('assets/models/cirrus_sr22.glb', (sr22) => {
+      sr22.position.set(sr22X, sr22Y, sr22Z);
+      sr22.scale.setScalar(1.18);
+      sr22.rotation.y = Math.PI - 0.68;
+      sr22.traverse((obj) => {
+        if (!obj.isMesh || !obj.material) return;
+        if (obj.material.map) {
+          obj.material.map.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+        }
+        const mName = obj.material.name || '';
+        if (mName === 'SR22_CabinGlass') {
+          obj.material.roughness = 0.05;
+          obj.material.metalness = 0.25;
+          obj.material.envMapIntensity = 1.65;
+        } else if (mName === 'SR22_Livery' || mName === 'SR22_SnowWhite') {
+          obj.material.roughness = 0.20;
+          obj.material.envMapIntensity = 0.95;
+        }
+      });
+      this._addContactShadow(shelfGroup, sr22X, sr22Y + 0.0008, sr22Z, 0.22, 0.17, 0.36);
+      shelfGroup.add(sr22);
+    });
 
     this._addContactShadow(shelfGroup, 0, 0.003, 0, 1.85, 0.54, 0.46);
     this.scene.add(shelfGroup);
