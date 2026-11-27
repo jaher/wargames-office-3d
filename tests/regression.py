@@ -195,7 +195,7 @@ def test_static_integrity():
     assert mod_idx < 0 or im_idx < mod_idx, "importmap MUST precede all module scripts!"
 
     refs = set()
-    for rel in ["index.html", "js/main.js", "js/officeScene.js", "js/omarchyScreen.js", "js/solutions.js", "js/blueAngelsShow.js", "js/blueAngelsAudio.js", "js/assetUrl.js", "css/style.css"]:
+    for rel in ["index.html", "js/main.js", "js/officeScene.js", "js/booksBuilder.js", "js/omarchyScreen.js", "js/solutions.js", "js/blueAngelsShow.js", "js/blueAngelsAudio.js", "js/assetUrl.js", "css/style.css"]:
         txt = open(os.path.join(ROOT, rel)).read()
         for m in re.findall(r"""['"]((?:assets|js|css|overthewire-solutions)/[^'"]+)['"]""", txt):
             if "${" not in m:
