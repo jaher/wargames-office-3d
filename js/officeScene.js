@@ -2708,7 +2708,7 @@ export class OfficeScene {
       isoPt(0.084, 0.016),
     ], 0.0052);
 
-    // 2. 6× NVIDIA DGX Spark FE (tall slim vertical towers, 3-wide × 2-high) + 2× ASUS GX10 (side-by-side base)
+    // 2. 6× NVIDIA DGX Spark FE (true 50.5×150×150 mm slim vertical slabs, 3-wide × 2-high) + 2× ASUS GX10 (side-by-side base)
     //    Rear USB-C PD Power Harness -> Grounded Rear PD Hub -> 2 AC Feeders into ISOBAR8ULTRA Bank 3!
     const pdHub = new THREE.Mesh(new RoundedBoxGeometry(0.070, 0.024, 0.088, 2, 0.005), acPlugMat);
     pdHub.position.set(0.375, sy + 0.0125, -1.275);
@@ -2716,18 +2716,18 @@ export class OfficeScene {
     pdHub.receiveShadow = true;
     deskGroup.add(pdHub);
     const gxBaseXs = [0.257, 0.413];
-    const sparkColXs = [0.245, 0.335, 0.425];
-    const sparkTierYs = [sy + 0.0543, sy + 0.0543 + 0.1604];
+    const sparkColXs = [0.267, 0.335, 0.403];
+    const sparkTierYs = [sy + 0.0543, sy + 0.0543 + 0.150];
     const pdPorts = [
       // Bottom 2× ASUS GX10 side-by-side (rear right USB-C PD inlet)
       { x: gxBaseXs[0] + 0.047, y: sy + 0.020, z: -1.08 - 0.073 },
       { x: gxBaseXs[1] + 0.047, y: sy + 0.020, z: -1.08 - 0.073 },
-      // 6× Upright DGX Spark FE (3-wide × 2-high; rear right USB-C PD inlet at +14mm X, +35mm Y, -70mm Z)
+      // 6× Upright DGX Spark FE (3-wide × 2-high; rear right USB-C PD inlet at +10.5mm X, +29.8mm Y, -74mm Z)
       ...[0, 1].flatMap((tier) =>
         sparkColXs.map((cx) => ({
-          x: cx + 0.014,
-          y: sparkTierYs[tier] + 0.035,
-          z: -1.08 - 0.070,
+          x: cx + 0.0105,
+          y: sparkTierYs[tier] + 0.0298,
+          z: -1.08 - 0.074,
         }))
       ),
     ];
@@ -3297,14 +3297,14 @@ export class OfficeScene {
 
     // 2. 8× GB10 Nodes ON THE DESK right alongside the MikroTik CRS804 switch:
     //    - Base row (2 units): Stellar Grey ASUS Ascent GX10 (asus_gx10.glb, 150x150x54mm) side-by-side
-    //    - Upper 2 tiers (6 units, 3-wide × 2-high): Tall slim vertical NVIDIA DGX Spark FE towers (dgx_spark.glb, 76x158x142mm)
+    //    - Upper 2 tiers (6 units, 3-wide × 2-high): True-scale upright NVIDIA DGX Spark FE slim slabs (dgx_spark.glb, 50.5x150x150mm)
     //      with speckled champagne-gold front, smooth pale-gold top inset & pill slot, coppery bottom plate & green NVIDIA eye!
     const gxStepY = 0.0543;
-    const sparkStepY = 0.1604;
+    const sparkStepY = 0.150;
     const stackCenterX = 0.335;
     const stackZ = -1.08;
     const gxXs = [stackCenterX - 0.078, stackCenterX + 0.078]; // 0.257, 0.413
-    const sparkColXs = [stackCenterX - 0.090, stackCenterX, stackCenterX + 0.090]; // 0.245, 0.335, 0.425
+    const sparkColXs = [stackCenterX - 0.068, stackCenterX, stackCenterX + 0.068]; // 0.267, 0.335, 0.403 (50.5mm slabs + 17.5mm airflow gap)
     const sparkTierYs = [sy + gxStepY, sy + gxStepY + sparkStepY];
 
     this._addContactShadow(deskCluster, stackCenterX, sy + 0.0015, stackZ, 0.36, 0.22, 0.95);
@@ -3377,12 +3377,12 @@ export class OfficeScene {
       new THREE.MeshStandardMaterial({ color: 0x212732, roughness: 0.34, metalness: 0.18 }),
     ];
 
-    // Exact rear ConnectX-7 QSFP port coordinates for all 8 nodes (2× GX10 base + 6× upright DGX Spark FE)
+    // Exact rear ConnectX-7 QSFP port coordinates for all 8 nodes (2× GX10 base + 6× upright 50.5×150×150 mm DGX Spark FE)
     const qsfpTargets = [
       new THREE.Vector3(gxXs[0] - 0.042, sy + 0.021, stackZ - 0.077),
       new THREE.Vector3(gxXs[1] - 0.042, sy + 0.021, stackZ - 0.077),
       ...[0, 1].flatMap((tier) =>
-        sparkColXs.map((cx) => new THREE.Vector3(cx - 0.014, sparkTierYs[tier] + 0.048, stackZ - 0.072))
+        sparkColXs.map((cx) => new THREE.Vector3(cx - 0.0095, sparkTierYs[tier] + 0.0518, stackZ - 0.074))
       ),
     ];
 
@@ -3462,7 +3462,7 @@ export class OfficeScene {
     }
     // Three tidy matte-black velcro cable straps binding the vertical DAC spine behind the cluster
     const strapMat = new THREE.MeshStandardMaterial({ color: 0x101318, roughness: 0.85 });
-    for (const strapY of [sy + 0.08, sy + 0.19, sy + 0.28]) {
+    for (const strapY of [sy + 0.07, sy + 0.145, sy + 0.22]) {
       const strap = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.010, 14), strapMat);
       strap.position.set(0.168, strapY, stackZ - 0.100);
       deskCluster.add(strap);
