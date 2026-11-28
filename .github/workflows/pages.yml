@@ -47,19 +47,30 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          ARTIFACT_ID=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" --jq '[.artifacts[] | select(.name=="github-pages")] | sort_by(.created_at) | last | .id')
+          # The artifact list API can lag the upload step: retry up to 2 min
+          # instead of posting an empty artifact_id (HTTP 400 "Problems
+          # parsing JSON", run 46105905518). The old `test -n ... && ...`
+          # guard never fired under `set -e` (a failing test in a && list
+          # does not exit the script), so fail explicitly instead.
+          ARTIFACT_ID=""
+          for i in $(seq 1 12); do
+            ARTIFACT_ID=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" --jq '[.artifacts[] | select(.name=="github-pages")] | sort_by(.created_at) | last | .id // empty' || true)
+            if [ -n "${ARTIFACT_ID}" ] && [ "${ARTIFACT_ID}" != "null" ]; then break; fi
+            echo "github-pages artifact not listed yet (attempt ${i}/12), waiting 10s"
+            sleep 10
+          done
+          if [ -z "${ARTIFACT_ID}" ] || [ "${ARTIFACT_ID}" = "null" ]; then echo "github-pages artifact not found after 2 minutes"; exit 1; fi
           echo "artifact id: ${ARTIFACT_ID}"
-          test -n "${ARTIFACT_ID}" && test "${ARTIFACT_ID}" != "null"
           ID_TOKEN=$(curl -s -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}" | jq -r .value)
-          test -n "${ID_TOKEN}" && test "${ID_TOKEN}" != "null"
+          if [ -z "${ID_TOKEN}" ] || [ "${ID_TOKEN}" = "null" ]; then echo "OIDC token missing"; exit 1; fi
           DEPLOY_JSON=$(curl -s -X POST \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/deployments" \
             -d "{\"artifact_id\": ${ARTIFACT_ID}, \"pages_build_version\": \"${GITHUB_SHA}\", \"oidc_token\": \"${ID_TOKEN}\"}")
           echo "${DEPLOY_JSON}"
-          DEPLOY_ID=$(echo "${DEPLOY_JSON}" | jq -r '.id // (.status_url | split("/") | last)')
-          test -n "${DEPLOY_ID}" && test "${DEPLOY_ID}" != "null"
+          DEPLOY_ID=$(echo "${DEPLOY_JSON}" | jq -r '.id // empty')
+          if [ -z "${DEPLOY_ID}" ]; then echo "failed to create pages deployment: ${DEPLOY_JSON}"; exit 1; fi
           for i in $(seq 1 30); do
             STATUS_JSON=$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/deployments/${DEPLOY_ID}")
             STATUS=$(echo "${STATUS_JSON}" | jq -r .status)
