@@ -22,8 +22,8 @@ export const CAMERA_PRESETS = {
     target: [0.85, 1.04, -0.96],
   },
   cluster: {
-    pos: [0.44, 1.49, 0.04],
-    target: [0.16, 0.94, -1.04],
+    pos: [0.46, 1.44, 0.06],
+    target: [0.24, 0.98, -1.06],
   },
   window: {
     pos: [-0.15, 1.54, 1.48],
@@ -2708,34 +2708,49 @@ export class OfficeScene {
       isoPt(0.084, 0.016),
     ], 0.0052);
 
-    // 2. 6× NVIDIA DGX Spark + 2× ASUS GX10 Rear USB-C PD Power Harness -> Grounded Rear PD Hub -> 2 AC Feeders into ISOBAR8ULTRA Bank 3!
+    // 2. 6× NVIDIA DGX Spark FE (tall slim vertical towers, 3-wide × 2-high) + 2× ASUS GX10 (side-by-side base)
+    //    Rear USB-C PD Power Harness -> Grounded Rear PD Hub -> 2 AC Feeders into ISOBAR8ULTRA Bank 3!
     const pdHub = new THREE.Mesh(new RoundedBoxGeometry(0.070, 0.024, 0.088, 2, 0.005), acPlugMat);
-    pdHub.position.set(0.355, sy + 0.0125, -1.275);
+    pdHub.position.set(0.375, sy + 0.0125, -1.275);
     pdHub.castShadow = true;
     pdHub.receiveShadow = true;
     deskGroup.add(pdHub);
-    for (let i = 0; i < 8; i++) {
-      const nodeY = sy + i * 0.0543 + 0.020;
-      const usbcX = 0.31 + 0.047;
-      const usbcZ = -1.08 - 0.073;
-      const pBoot = new THREE.Mesh(new RoundedBoxGeometry(0.011, 0.007, 0.016, 2, 0.002), acPlugMat);
-      pBoot.position.set(usbcX, nodeY, usbcZ - 0.006);
+    const gxBaseXs = [0.257, 0.413];
+    const sparkColXs = [0.245, 0.335, 0.425];
+    const sparkTierYs = [sy + 0.0543, sy + 0.0543 + 0.1604];
+    const pdPorts = [
+      // Bottom 2× ASUS GX10 side-by-side (rear right USB-C PD inlet)
+      { x: gxBaseXs[0] + 0.047, y: sy + 0.020, z: -1.08 - 0.073 },
+      { x: gxBaseXs[1] + 0.047, y: sy + 0.020, z: -1.08 - 0.073 },
+      // 6× Upright DGX Spark FE (3-wide × 2-high; rear right USB-C PD inlet at +14mm X, +35mm Y, -70mm Z)
+      ...[0, 1].flatMap((tier) =>
+        sparkColXs.map((cx) => ({
+          x: cx + 0.014,
+          y: sparkTierYs[tier] + 0.035,
+          z: -1.08 - 0.070,
+        }))
+      ),
+    ];
+    for (let i = 0; i < pdPorts.length; i++) {
+      const pt = pdPorts[i];
+      const pBoot = new THREE.Mesh(new RoundedBoxGeometry(0.010, 0.007, 0.015, 2, 0.002), acPlugMat);
+      pBoot.position.set(pt.x, pt.y, pt.z - 0.006);
       deskGroup.add(pBoot);
 
-      const spineX = 0.368 + (i % 2) * 0.005;
+      const spineX = 0.445 + (i % 2) * 0.005;
       const spineZ = -1.178 - Math.floor(i / 2) * 0.0035;
       const pts = [
-        [usbcX, nodeY, usbcZ - 0.011],
-        [usbcX + 0.008, nodeY, spineZ],
-        [spineX, Math.max(sy + 0.012, nodeY - 0.008), spineZ],
+        [pt.x, pt.y, pt.z - 0.011],
+        [pt.x + 0.008, pt.y, spineZ],
+        [spineX, Math.max(sy + 0.012, pt.y - 0.008), spineZ],
       ];
-      if (i >= 3) {
-        pts.push([spineX, sy + (nodeY - sy) * 0.52, spineZ]);
+      if (pt.y > sy + 0.14) {
+        pts.push([spineX, sy + (pt.y - sy) * 0.52, spineZ]);
       }
       pts.push(
         [spineX, sy + 0.014, spineZ - 0.008],
-        [0.362 + (i % 2) * 0.006, sy + 0.006, -1.215],
-        [0.345 + (i % 3) * 0.010, sy + 0.012, -1.238]
+        [0.405 + (i % 2) * 0.006, sy + 0.006, -1.222],
+        [0.365 + (i % 3) * 0.010, sy + 0.012, -1.238]
       );
       addAcCord(pts, 0.0021, false);
     }
@@ -2880,8 +2895,8 @@ export class OfficeScene {
       deskGroup.add(mug);
     });
 
-    // Authentic Mathmos Astro Classic Lava Lamp (430 x 140 mm) between 8x DGX Spark stack & Corsair PC!
-    const lavaX = 0.51;
+    // Authentic Mathmos Astro Classic Lava Lamp (430 x 140 mm) between 8x GB10 cluster & Corsair PC!
+    const lavaX = 0.58;
     const lavaZ = -0.98;
     this._loadGLB('assets/models/lava_lamp.glb', (lava) => {
       lava.position.set(lavaX, sy, lavaZ);
@@ -3280,21 +3295,27 @@ export class OfficeScene {
       deskCluster.add(crsModel);
     });
 
-    // 2. Stack of 8× GB10 Nodes ON THE DESK right alongside the CRS804 & monitor:
-    //    - Bottom 2 units (indices 0, 1): Stellar Grey ASUS Ascent GX10 (asus_gx10.glb)
-    //    - Top 6 units (indices 2..7): Champagne-Gold NVIDIA DGX Spark (dgx_spark.glb) with front NVIDIA logo & per-unit varied metal foam!
-    const sparkStepY = 0.0543;
-    const stackX = 0.31;
+    // 2. 8× GB10 Nodes ON THE DESK right alongside the MikroTik CRS804 switch:
+    //    - Base row (2 units): Stellar Grey ASUS Ascent GX10 (asus_gx10.glb, 150x150x54mm) side-by-side
+    //    - Upper 2 tiers (6 units, 3-wide × 2-high): Tall slim vertical NVIDIA DGX Spark FE towers (dgx_spark.glb, 76x158x142mm)
+    //      with speckled champagne-gold front, smooth pale-gold top inset & pill slot, coppery bottom plate & green NVIDIA eye!
+    const gxStepY = 0.0543;
+    const sparkStepY = 0.1604;
+    const stackCenterX = 0.335;
     const stackZ = -1.08;
-    this._addContactShadow(deskCluster, stackX, sy + 0.0015, stackZ, 0.22, 0.22, 0.95);
+    const gxXs = [stackCenterX - 0.078, stackCenterX + 0.078]; // 0.257, 0.413
+    const sparkColXs = [stackCenterX - 0.090, stackCenterX, stackCenterX + 0.090]; // 0.245, 0.335, 0.425
+    const sparkTierYs = [sy + gxStepY, sy + gxStepY + sparkStepY];
+
+    this._addContactShadow(deskCluster, stackCenterX, sy + 0.0015, stackZ, 0.36, 0.22, 0.95);
 
     const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
 
-    // Load 2× ASUS Ascent GX10 (Stellar Grey) at the base of the 8-node stack
+    // Load 2× ASUS Ascent GX10 (Stellar Grey) side-by-side at the base of the cluster
     this._loadGLB('assets/models/asus_gx10.glb', (gxTemplate) => {
       for (let i = 0; i < 2; i++) {
         const unit = i === 0 ? gxTemplate : gxTemplate.clone(true);
-        unit.position.set(stackX, sy + i * sparkStepY, stackZ);
+        unit.position.set(gxXs[i], sy, stackZ);
         unit.traverse((obj) => {
           if (!obj.isMesh) return;
           obj.userData.camPreset = 'cluster';
@@ -3312,37 +3333,40 @@ export class OfficeScene {
       }
     });
 
-    // Load 6× NVIDIA DGX Spark (Champagne Gold) stacked cleanly above the 2 ASUS Ascent GX10 units
+    // Load 6× tall slim vertical NVIDIA DGX Spark FE towers (3-wide × 2-high) standing cleanly on top of the 2× GX10 base
     this._loadGLB('assets/models/dgx_spark.glb', (sparkTemplate) => {
-      for (let i = 2; i < 8; i++) {
-        const unit = i === 2 ? sparkTemplate : sparkTemplate.clone(true);
-        unit.position.set(stackX, sy + i * sparkStepY, stackZ);
-        unit.traverse((obj) => {
-          if (!obj.isMesh) return;
-          obj.userData.camPreset = 'cluster';
-          this.clickableMeshes.push(obj);
-          if (obj.material?.name === 'Spark_GoldTop') {
-            obj.material.envMapIntensity = 0.72;
-          }
-          if (obj.material?.name === 'Spark_FrontNvidiaLogo' && obj.material.map) {
-            obj.material.map.anisotropy = maxAniso;
-            obj.material.map.needsUpdate = true;
-          }
-          if (obj.material?.name === 'Spark_GoldMetalFoam') {
-            // Share GPU textures across all 6 DGX Spark units (zero 18x redundant texture uploads!) while keeping subtle per-unit anodized tint
-            const m = obj.material.clone();
-            const tintShift = 0.94 + ((i * 37) % 11) * 0.012;
-            m.color.setRGB(tintShift, tintShift * 0.98, tintShift * 0.94);
-            m.needsUpdate = true;
-            obj.material = m;
-          }
-        });
-        deskCluster.add(unit);
+      for (let tier = 0; tier < 2; tier++) {
+        for (let col = 0; col < 3; col++) {
+          const idx = tier * 3 + col;
+          const unit = idx === 0 ? sparkTemplate : sparkTemplate.clone(true);
+          unit.position.set(sparkColXs[col], sparkTierYs[tier], stackZ);
+          unit.traverse((obj) => {
+            if (!obj.isMesh) return;
+            obj.userData.camPreset = 'cluster';
+            this.clickableMeshes.push(obj);
+            if (obj.material?.map) {
+              obj.material.map.anisotropy = maxAniso;
+              obj.material.map.needsUpdate = true;
+            }
+            if (obj.material?.name === 'Spark_PaleGoldInset' || obj.material?.name === 'Spark_PaleGoldTrim') {
+              obj.material.envMapIntensity = 0.85;
+            }
+            if (obj.material?.name === 'Spark_GoldMetalFoam') {
+              // Share GPU textures across all 6 DGX Spark FE units while keeping subtle authentic per-unit anodized variance
+              const m = obj.material.clone();
+              const tintShift = 0.965 + ((idx * 37) % 9) * 0.008;
+              m.color.setRGB(tintShift, tintShift * 0.99, tintShift * 0.97);
+              m.needsUpdate = true;
+              obj.material = m;
+            }
+          });
+          deskCluster.add(unit);
+        }
       }
     });
 
     // 3. Authentic 4× 400G QSFP56-DD -> 8× 200GbE ConnectX-7 Passive Copper DAC Breakout Cables
-    // Routed flat along the desk into a clean vertical rear spine BEHIND the DGX stack (ZERO spiky mid-air triangular web!)
+    // Routed flat along the desk into a clean vertical rear spine BEHIND the cluster (ZERO chassis clipping!)
     const qsfpLocalXs = [0.016, 0.042, 0.068, 0.094];
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x161a22, roughness: 0.36, metalness: 0.14 });
     const splitterMat = new THREE.MeshStandardMaterial({ color: 0x242a34, roughness: 0.34, metalness: 0.48 });
@@ -3353,22 +3377,31 @@ export class OfficeScene {
       new THREE.MeshStandardMaterial({ color: 0x212732, roughness: 0.34, metalness: 0.18 }),
     ];
 
+    // Exact rear ConnectX-7 QSFP port coordinates for all 8 nodes (2× GX10 base + 6× upright DGX Spark FE)
+    const qsfpTargets = [
+      new THREE.Vector3(gxXs[0] - 0.042, sy + 0.021, stackZ - 0.077),
+      new THREE.Vector3(gxXs[1] - 0.042, sy + 0.021, stackZ - 0.077),
+      ...[0, 1].flatMap((tier) =>
+        sparkColXs.map((cx) => new THREE.Vector3(cx - 0.014, sparkTierYs[tier] + 0.048, stackZ - 0.072))
+      ),
+    ];
+
     // Clean non-overlapping contact AO shadows beneath staggered breakout pods & yellow uplink (stepped Y -> ZERO Z-fighting!)
-    this._addContactShadow(deskCluster, 0.155, sy + 0.0012, swZ + 0.165, 0.19, 0.16, 0.90);
-    this._addContactShadow(deskCluster, 0.185, sy + 0.0018, swZ - 0.04, 0.09, 0.34, 0.86);
+    this._addContactShadow(deskCluster, 0.145, sy + 0.0012, swZ + 0.165, 0.16, 0.16, 0.90);
+    this._addContactShadow(deskCluster, 0.160, sy + 0.0018, swZ - 0.04, 0.07, 0.34, 0.86);
     this._addContactShadow(deskCluster, swX - 0.154, sy + 0.0018, swZ + 0.00, 0.055, 0.44, 0.84);
 
     for (let p = 0; p < 4; p++) {
       const px = swX + qsfpLocalXs[p];
       const portExit = new THREE.Vector3(px, sy + 0.022, swZ + 0.206);
-      const splitX = 0.140 + p * 0.015;
+      const splitX = 0.126 + p * 0.011;
       const splitZ = swZ + 0.194 - p * 0.024;
       const splitPos = new THREE.Vector3(splitX, sy + 0.0080, splitZ);
 
       const trunkCurve = new THREE.CatmullRomCurve3([
         portExit,
         new THREE.Vector3(px + 0.006, sy + 0.017, swZ + 0.218 + (3 - p) * 0.003),
-        new THREE.Vector3(px + 0.022 + p * 0.005, sy + 0.0095, swZ + 0.220 + (3 - p) * 0.003),
+        new THREE.Vector3(px + 0.018 + p * 0.004, sy + 0.0095, swZ + 0.220 + (3 - p) * 0.003),
         splitPos,
       ]);
       const trunkMesh = new THREE.Mesh(new THREE.TubeGeometry(trunkCurve, 24, 0.0048, 12, false), trunkMat);
@@ -3390,28 +3423,27 @@ export class OfficeScene {
 
       for (let sub = 0; sub < 2; sub++) {
         const nodeIdx = p * 2 + sub;
-        const nodeY = sy + nodeIdx * sparkStepY + 0.021;
-        const portX = stackX - (sub === 0 ? 0.042 : 0.060);
-        const pEnd = new THREE.Vector3(portX, nodeY, stackZ - 0.077);
+        const pEnd = qsfpTargets[nodeIdx];
+        const nodeY = pEnd.y;
 
-        // Flat along desk beside stack -> crisp centripetal vertical zip-tied harness strictly BEHIND back-left corner (z <= -1.170 -> ZERO chassis or desk clipping!)
-        const laneX = 0.168 + p * 0.009 + sub * 0.0042;
+        // Flat along desk beside cluster -> crisp centripetal vertical zip-tied harness strictly BEHIND back-left corner
+        const laneX = 0.146 + p * 0.006 + sub * 0.003;
         const deskY = sy + 0.0046 + sub * 0.0010;
-        const spineX = stackX - 0.095 + (sub * 0.005);
-        const spineZ = stackZ - 0.090 - p * 0.004;
+        const spineX = 0.166 + (sub * 0.005);
+        const spineZ = stackZ - 0.094 - p * 0.004;
         const leadPts = [
           splitPos,
           new THREE.Vector3(laneX, deskY, splitZ - 0.045),
-          new THREE.Vector3(laneX + 0.008, deskY, stackZ + 0.01),
-          new THREE.Vector3(spineX - 0.004, deskY + 0.003, stackZ - 0.068),
+          new THREE.Vector3(laneX + 0.006, deskY, stackZ + 0.01),
+          new THREE.Vector3(spineX - 0.004, deskY + 0.003, stackZ - 0.070),
           new THREE.Vector3(spineX, deskY + 0.016, spineZ),
         ];
-        if (nodeIdx >= 3) {
+        if (nodeY > sy + 0.14) {
           leadPts.push(new THREE.Vector3(spineX, sy + (nodeY - sy) * 0.52, spineZ));
         }
         leadPts.push(
           new THREE.Vector3(spineX, Math.max(deskY + 0.018, nodeY - 0.008), spineZ),
-          new THREE.Vector3(portX, nodeY, spineZ - 0.012),
+          new THREE.Vector3(pEnd.x, nodeY, spineZ - 0.010),
           pEnd
         );
         const leadCurve = new THREE.CatmullRomCurve3(leadPts, false, 'centripetal', 0.5);
@@ -3428,11 +3460,11 @@ export class OfficeScene {
         deskCluster.add(boot);
       }
     }
-    // Three tidy matte-black velcro cable straps binding the vertical DAC spine behind the DGX stack
+    // Three tidy matte-black velcro cable straps binding the vertical DAC spine behind the cluster
     const strapMat = new THREE.MeshStandardMaterial({ color: 0x101318, roughness: 0.85 });
-    for (const strapY of [sy + 0.08, sy + 0.21, sy + 0.34]) {
+    for (const strapY of [sy + 0.08, sy + 0.19, sy + 0.28]) {
       const strap = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.010, 14), strapMat);
-      strap.position.set(stackX - 0.093, strapY, stackZ - 0.096);
+      strap.position.set(0.168, strapY, stackZ - 0.100);
       deskCluster.add(strap);
     }
 
